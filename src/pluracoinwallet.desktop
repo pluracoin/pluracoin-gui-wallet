@@ -1,0 +1,22 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=PluraCoin
+GenericName=Plura wallet
+Name[ru]=PluraCoin
+Name[pl]=PluraCoin
+Name[be]=PluraCoin
+Name[de]=PluraCoin
+Name[es]=PluraCoin
+Comment=PluraCoin wallet
+Comment[ru]=Кошелек PluraCoin
+Comment[pl]=Portfel PluraCoin
+Comment[be]=Кашалёк PluraCoin
+Comment[de]=PluraCoin Brieftasche
+Comment[es]=PluraCoin Monedero
+Exec=PluraCoin %U
+Terminal=false
+Type=Application
+Icon=pluracoin
+MimeType=x-scheme-handler/pluracoin;
+Categories=Office;Finance;
+Version=1.0.0

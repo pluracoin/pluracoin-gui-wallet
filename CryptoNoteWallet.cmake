@@ -1,0 +1,5 @@
+
+set(CN_PROJECT_NAME "PluraCoin")
+set(CN_CURRENCY_DISPLAY_NAME "PluraCoin")
+set(CN_CURRENCY_TICKER "PLURA")
+set(CN_VERSION 1.0.0)
