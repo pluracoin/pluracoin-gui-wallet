@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers, PluraCoin developers
+// Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers, The Pluracoin developers
 //
 // This file is part of Bytecoin.
 //

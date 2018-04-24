@@ -7,13 +7,21 @@
 #include <QApplication>
 #include <QFileDialog>
 #include <QStandardPaths>
+#include <QMessageBox>
 #include "RestoreFromMnemonicSeedDialog.h"
 #include "ui_restorefrommnemonicseeddialog.h"
 
 namespace WalletGui {
 
 RestoreFromMnemonicSeedDialog::RestoreFromMnemonicSeedDialog(QWidget* _parent) : QDialog(_parent), m_ui(new Ui::RestoreFromMnemonicSeedDialog) {
-  m_ui->setupUi(this);
+  m_ui->setupUi(this);  
+}
+
+void RestoreFromMnemonicSeedDialog::checkWalletPath() {
+  if(getFilePath().isEmpty()) {
+    QMessageBox::critical(nullptr, tr("Missing path to wallet"), tr("Please specify path where to create a new wallet."), QMessageBox::Ok);      
+    m_ui->m_pathEdit->setFocus();
+    }  
 }
 
 RestoreFromMnemonicSeedDialog::~RestoreFromMnemonicSeedDialog() {
@@ -27,7 +35,7 @@ QString RestoreFromMnemonicSeedDialog::getFilePath() const {
   return m_ui->m_pathEdit->text().trimmed();
 }
 
-void RestoreFromMnemonicSeedDialog::selectPathClicked() {
+void RestoreFromMnemonicSeedDialog::selectPathClicked() {  
   QString filePath = QFileDialog::getSaveFileName(this, tr("Wallet file"),
 #ifdef Q_OS_WIN
     //QApplication::applicationDirPath(),

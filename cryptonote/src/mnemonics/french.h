@@ -1,5 +1,5 @@
 // Copyright (c) 2014-2017, The Monero Project
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2017-2018, Plura developers
 //
 // All rights reserved.
 //

@@ -758,6 +758,12 @@ void MainWindow::about() {
   dlg.exec();
 }
 
+void MainWindow::openDataLocation() {
+  //TODO 
+  //Multiplatform data storage location open
+  //Log location
+}
+
 void MainWindow::setStatusBarText(const QString& _text) {
   statusBar()->showMessage(_text);
 }

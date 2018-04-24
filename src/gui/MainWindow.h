@@ -95,6 +95,7 @@ private:
   Q_SLOT void encryptWallet();
   Q_SLOT void aboutQt();
   Q_SLOT void about();
+  Q_SLOT void openDataLocation();
   Q_SLOT void setStartOnLogin(bool _on);
   Q_SLOT void setMinimizeToTray(bool _on);
   Q_SLOT void setMiningOnLaunch(bool _on);

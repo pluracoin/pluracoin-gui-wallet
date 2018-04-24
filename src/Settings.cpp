@@ -27,6 +27,7 @@ Q_DECL_CONSTEXPR char OPTION_RPCNODES[] = "remoteNodes";
 Q_DECL_CONSTEXPR char OPTION_DAEMON_PORT[] = "daemonPort";
 Q_DECL_CONSTEXPR char OPTION_REMOTE_NODE[] = "remoteNode";
 Q_DECL_CONSTEXPR char OPTION_CURRENT_POOL[] = "currentPool";
+const char OPTION_WALLET_THEME[] = "theme";
 
 Settings& Settings::instance() {
   static Settings inst;
@@ -61,7 +62,9 @@ void Settings::load() {
     }
 
     if (!m_settings.contains(OPTION_CONNECTION)) {
-         m_connectionMode = "auto";
+         //m_connectionMode = "auto";
+        m_connectionMode = "remote";
+
     }
 
     if (!m_settings.contains(OPTION_DAEMON_PORT)) {
@@ -103,7 +106,7 @@ void Settings::load() {
   }
 
   QStringList defaultNodesList;
-  defaultNodesList << "master.pluracoin.org:19214";
+  defaultNodesList << "community.pluracoin.org:19201" << "node1.pluracoin.org:19201";
   if (!m_settings.contains(OPTION_RPCNODES)) {
     setRpcNodesList(QStringList() << defaultNodesList);
   } else {
@@ -219,6 +222,10 @@ QStringList Settings::getMiningPoolList() const {
   return res;
 }
 
+QString Settings::getCurrentTheme() const {
+  return m_settings.contains(OPTION_WALLET_THEME) ? m_settings.value(OPTION_WALLET_THEME).toString() : "light";
+}
+
 QString Settings::getLanguage() const {
     QString currentLang;
     if (m_settings.contains(OPTION_LANGUAGE)) {
@@ -233,7 +240,8 @@ QString Settings::getConnection() const {
         connection = m_settings.value(OPTION_CONNECTION).toString();
     }
     else {
-    connection = "auto"; // default
+    //connection = "auto"; // default
+    connection = "remote"; // default
     }
     return connection;
 }
@@ -259,6 +267,9 @@ QString Settings::getCurrentRemoteNode() const {
     QString remotenode;
     if (m_settings.contains(OPTION_REMOTE_NODE)) {
         remotenode = m_settings.value(OPTION_REMOTE_NODE).toString();
+      }
+    else {
+      remotenode = "community.pluracoin.org:19201";
     }
     return remotenode;
 }

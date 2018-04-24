@@ -65,7 +65,7 @@
         <string>Auto selection</string>
        </property>
        <property name="checked">
-        <bool>true</bool>
+        <bool>false</bool>
        </property>
       </widget>
      </item>
@@ -130,7 +130,7 @@
           <number>65535</number>
          </property>
          <property name="value">
-          <number>19214</number>
+          <number>19201</number>
          </property>
          <property name="displayIntegerBase">
           <number>10</number>
@@ -169,6 +169,9 @@
       <widget class="QRadioButton" name="radioButton_4">
        <property name="text">
         <string>Remote daemon</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
        </property>
       </widget>
      </item>

@@ -617,6 +617,11 @@
     <string>Start pool mining automatically</string>
    </property>
   </action>
+  <action name="actionOpen_data_location">
+   <property name="text">
+    <string>Open data location</string>
+   </property>
+  </action>
  </widget>
  <customwidgets>
   <customwidget>

@@ -1,4 +1,5 @@
 // Copyright (c) 2011-2015 The Cryptonote developers
+// Copyright (c) 2016-2017 The Karbowanec developers
 // Copyright (c) 2018 PluraCoin developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -8,8 +9,10 @@
 #include <QTranslator>
 #include <QLockFile>
 #include <QMessageBox>
+#include <QProcess>
 #include <QSplashScreen>
 #include <QStyleFactory>
+#include <QSettings>
 
 #include "CommandLineParser.h"
 #include "CurrencyAdapter.h"
@@ -30,7 +33,7 @@ using namespace WalletGui;
 int main(int argc, char* argv[]) {
 
   QApplication app(argc, argv);
-  app.setApplicationName(CurrencyAdapter::instance().getCurrencyName() + "wallet");
+  app.setApplicationName(CurrencyAdapter::instance().getCurrencyName() + "V4wallet");
   app.setApplicationVersion(Settings::instance().getVersion());
   app.setQuitOnLastWindowClosed(false);
 
@@ -65,6 +68,8 @@ int main(int argc, char* argv[]) {
             QLocale::setDefault(QLocale("es_ES"));
         } else if(lng == "fr") {
             QLocale::setDefault(QLocale("fr_FR"));
+        } else if(lng == "pt") {
+            QLocale::setDefault(QLocale("pt_BR"));
         } else {
             QLocale::setDefault(QLocale::c());
         }
@@ -102,11 +107,33 @@ int main(int argc, char* argv[]) {
     QMessageBox::information(nullptr, QObject::tr("Help"), cmdLineParser.getHelpText());
     return app.exec();
   }
+
+  //Create registry entries for URL execution
+  QSettings pluracoinKey("HKEY_CLASSES_ROOT\\pluracoin", QSettings::NativeFormat);
+  pluracoinKey.setValue(".", "PluraCoin Wallet");
+  pluracoinKey.setValue("URL Protocol", "");
+  QSettings pluracoinOpenKey("HKEY_CLASSES_ROOT\\pluracoin\\shell\\open\\command", QSettings::NativeFormat);
+  pluracoinOpenKey.setValue(".", "\"" + QCoreApplication::applicationFilePath().replace("/", "\\") + "\" \"%1\"");
+#endif
+
+#if defined(Q_OS_LINUX)
+  QStringList args;
+  QProcess exec;
+
+  //as root
+  args << "-c" << "printf '[Desktop Entry]\\nName = PluraCoin URL Handler\\nGenericName = PluraCoin\\nComment = Handle URL Scheme pluracoin://\\nExec = " + QCoreApplication::applicationFilePath() + " %%u\\nTerminal = false\\nType = Application\\nMimeType = x-scheme-handler/pluracoin;\\nIcon = PluraCoin-Wallet' | tee /usr/share/applications/pluracoin-handler.desktop";
+  exec.start("/bin/sh", args);
+  exec.waitForFinished();
+
+  args.clear();
+  args << "-c" << "update-desktop-database";
+  exec.start("/bin/sh", args);
+  exec.waitForFinished();
 #endif
 
   LoggerAdapter::instance().init();
 
-  QString dataDirPath = Settings::instance().getDataDir().absolutePath();
+  QString dataDirPath = Settings::instance().getDataDir().absolutePath();  
 
   if (!QDir().exists(dataDirPath)) {
     QDir().mkpath(dataDirPath);
@@ -114,7 +141,7 @@ int main(int argc, char* argv[]) {
 
   QLockFile lockFile(Settings::instance().getDataDir().absoluteFilePath(QApplication::applicationName() + ".lock"));
   if (!lockFile.tryLock()) {
-    QMessageBox::warning(nullptr, QObject::tr("Fail"), QObject::tr("%1 wallet already running").arg(CurrencyAdapter::instance().getCurrencyDisplayName()));
+    QMessageBox::warning(nullptr, QObject::tr("Fail"), QObject::tr("%1 wallet already running or cannot create lock file %2. Check your permissions.").arg(CurrencyAdapter::instance().getCurrencyDisplayName()).arg(Settings::instance().getDataDir().absoluteFilePath(QApplication::applicationName() + ".lock")));
     return 0;
   }
 
