@@ -197,9 +197,10 @@ void SendFrame::openUriClicked() {
 }
 
 void SendFrame::parsePaymentRequest(QString _request) {
+    MainWindow::instance().showNormal();
     if(_request.startsWith("pluracoin://", Qt::CaseInsensitive))
     {
-       _request.replace(0, 13, "pluracoin:");
+       _request.replace(0, 12, "pluracoin:");
     }
     if(!_request.startsWith("pluracoin:", Qt::CaseInsensitive)) {
       QCoreApplication::postEvent(&MainWindow::instance(), new ShowMessageEvent(tr("Payment request should start with pluracoin:"), QtCriticalMsg));
@@ -208,10 +209,12 @@ void SendFrame::parsePaymentRequest(QString _request) {
 
     if(_request.startsWith("pluracoin:", Qt::CaseInsensitive))
     {
-      _request.remove(0, 11);
+      _request.remove(0, 10);
     }
 
     QString address = _request.split("?").at(0);
+
+    if(address.endsWith("/")) address = address.remove(address.length()-1, 1);
 
     if (!CurrencyAdapter::instance().validateAddress(address)) {
       QCoreApplication::postEvent(
@@ -219,6 +222,7 @@ void SendFrame::parsePaymentRequest(QString _request) {
         new ShowMessageEvent(tr("Invalid recipient address"), QtCriticalMsg));
       return;
     }
+
     m_transfers.at(0)->TransferFrame::setAddress(address);
 
     _request.replace("?", "&");
