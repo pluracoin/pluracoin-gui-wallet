@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
   } else if (cmdLineParser.hasHelpOption()) {
     QMessageBox::information(nullptr, QObject::tr("Help"), cmdLineParser.getHelpText());
     return app.exec();
-  }
+  }  
 
   //Create registry entries for URL execution
   QSettings pluracoinKey("HKEY_CLASSES_ROOT\\pluracoin", QSettings::NativeFormat);
