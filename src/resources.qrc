@@ -40,6 +40,7 @@
         <file alias="cancel">icons/cancel.png</file>
         <file alias="remote_mode">icons/remote_mode.png</file>
         <file alias="tracking">icons/tracking_mode.png</file>
+        <file alias="sweep">icons/broom.png</file>
     </qresource>
     <qresource prefix="/images">
         <file alias="splash">images/splash.png</file>
@@ -50,18 +51,6 @@
     </qresource>
     <qresource prefix="/skin">
         <file>default.qss</file>
-    </qresource>
-    <qresource prefix="/">        
-        <file>languages/qt_uk.qm</file>        
-        <file>languages/uk.qm</file>
-        <file>languages/de.qm</file>
-        <file>languages/qt_de.qm</file>
-        <file>languages/es.qm</file>
-        <file>languages/qt_es.qm</file>
-        <file>languages/fr.qm</file>
-        <file>languages/qt_fr.qm</file>
-        <file>languages/pt.qm</file>
-        <file>languages/qt_pt.qm</file>
     </qresource>
     <qresource prefix="/fonts">
         <file alias="mplusm">fonts/mplus-1m-medium.ttf</file>

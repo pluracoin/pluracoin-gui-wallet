@@ -87,7 +87,7 @@ void Updater::replyFinished (QNetworkReply *reply)
 
          if (ourVersion < remoteVersion) {
 
-             if (QMessageBox::warning(nullptr, QObject::tr("New version available"), QObject::tr("There is update available.\nDo you want to go to download page?"), QMessageBox::Ok, QMessageBox::Cancel) == QMessageBox::Ok) {
+             if (QMessageBox::warning(nullptr, QObject::tr("New version available"), QObject::tr("There is a new version of wallet available.\nDo you want to go to download page?"), QMessageBox::Ok, QMessageBox::Cancel) == QMessageBox::Ok) {
                  QString link = "https://pluracoin.org/#wallet";
                  QDesktopServices::openUrl(QUrl(link));
              }

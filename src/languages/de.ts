@@ -167,6 +167,10 @@
         <source>Français</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Português</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>ChangePasswordDialog</name>
@@ -220,7 +224,7 @@
     </message>
     <message>
         <source>Confirm sending %1 PLURA</source>
-        <translation type="unfinished">Bestätige senden %1 PLURA</translation>
+        <translation>Bestätige senden %1 PLURA</translation>
     </message>
 </context>
 <context>
@@ -299,11 +303,11 @@ Bitte warten...</translation>
     <name>ExportTrackingKeyDialog</name>
     <message>
         <source>Export tracking key</source>
-        <translation>Tracking key exportieren</translation>
+        <translation>Tracking Schlüssel exportieren</translation>
     </message>
     <message>
         <source>Tracking key allows to see all incoming transactions of this wallet. It does not allow to spend funds.</source>
-        <translation>Mit dem Tracking keyl können Sie alle eingehenden Transaktionen dieser Brieftasche sehen. Es wird nicht erlaubt Beträge auszugeben.</translation>
+        <translation>Mit dem Tracking Schlüssel können Sie alle eingehenden Transaktionen dieser Brieftasche sehen. Es wird nicht erlaubt Beträge auszugeben.</translation>
     </message>
     <message>
         <source>Save to file</source>
@@ -344,6 +348,14 @@ Bitte warten...</translation>
         <source>OK</source>
         <translation>OK</translation>
     </message>
+    <message>
+        <source>Where to save new wallet file:</source>
+        <translation>Wo neue Brieftasche Datei speichern:</translation>
+    </message>
+    <message>
+        <source>Select folder</source>
+        <translation>Ordner auswählen</translation>
+    </message>
 </context>
 <context>
     <name>ImportTrackingKeyDialog</name>
@@ -374,6 +386,14 @@ Bitte warten...</translation>
     <message>
         <source>OK</source>
         <translation>OK</translation>
+    </message>
+    <message>
+        <source>Where to save new wallet file:</source>
+        <translation>Wo neue Brieftasche Datei speichern:</translation>
+    </message>
+    <message>
+        <source>Select folder</source>
+        <translation>Ordner auswählen</translation>
     </message>
 </context>
 <context>
@@ -613,6 +633,22 @@ Bitte warten...</translation>
         <source>Start pool mining automatically</source>
         <translation>Pool mining automatisch starten</translation>
     </message>
+    <message>
+        <source>Wallet</source>
+        <translation>Brieftasche</translation>
+    </message>
+    <message>
+        <source>Sweep unmixable</source>
+        <translation>Unmischbare Beträge zusammenführen</translation>
+    </message>
+    <message>
+        <source>Sign message</source>
+        <translation>Melden Sie die Nachricht</translation>
+    </message>
+    <message>
+        <source>Verify signed message</source>
+        <translation>Überprüfen Sie die signierte Nachricht</translation>
+    </message>
 </context>
 <context>
     <name>MiningFrame</name>
@@ -793,6 +829,25 @@ Bitte warten...</translation>
     </message>
 </context>
 <context>
+    <name>NoWalletFrame</name>
+    <message>
+        <source>Frame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Welcome to PLURA Wallet!</source>
+        <translation>Willkommen bei PLURA Brieftasche!</translation>
+    </message>
+    <message>
+        <source>Create wallet</source>
+        <translation>Brieftasche erstellen</translation>
+    </message>
+    <message>
+        <source>Open wallet</source>
+        <translation>Brieftasche öffnen</translation>
+    </message>
+</context>
+<context>
     <name>OpenUriDialog</name>
     <message>
         <source>Open payment request</source>
@@ -845,6 +900,14 @@ Bitte warten...</translation>
         <source>Available balance:</source>
         <translation>Verfügbares Guthaben:</translation>
     </message>
+    <message>
+        <source>Unmixable dust:</source>
+        <translation>Unmischbar:</translation>
+    </message>
+    <message>
+        <source>0.00</source>
+        <translation>0.00</translation>
+    </message>
 </context>
 <context>
     <name>PasswordDialog</name>
@@ -894,6 +957,18 @@ Bitte warten...</translation>
         <source>Copy key</source>
         <translation>Schlüssel kopieren</translation>
     </message>
+    <message>
+        <source>Private Keys</source>
+        <translation>Privater Schlüssel</translation>
+    </message>
+    <message>
+        <source>Spend Secret Key</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>View Secret Key</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>QObject</name>
@@ -914,8 +989,8 @@ Bitte warten...</translation>
         <translation>Lade Blockchain...</translation>
     </message>
     <message>
-        <source>%1 wallet already running</source>
-        <translation>%1 Brieftasche läuft bereits</translation>
+        <source>%1 wallet already running or cannot create lock file %2. Check your permissions.</source>
+        <translation>%1 Brieftasche läuft bereits oder kann die Sperrdatei %2 nicht erstellen. Überprüfen Sie Ihre Berechtigungen.</translation>
     </message>
     <message>
         <source>New version available</source>
@@ -1013,6 +1088,14 @@ Möchten Sie die Download Seite besuchen?</translation>
         <source>OK</source>
         <translation>OK</translation>
     </message>
+    <message>
+        <source>Where to save new wallet file:</source>
+        <translation>Wo neue Brieftasche Datei speichern:</translation>
+    </message>
+    <message>
+        <source>Select folder</source>
+        <translation>Ordner auswählen</translation>
+    </message>
 </context>
 <context>
     <name>SendFrame</name>
@@ -1074,7 +1157,35 @@ Möchten Sie die Download Seite besuchen?</translation>
     </message>
     <message>
         <source>Anonymity level:</source>
-        <translation type="unfinished"></translation>
+        <translation>Anonymitätsebene:</translation>
+    </message>
+    <message>
+        <source>Payment ID:</source>
+        <translation>Payment ID:</translation>
+    </message>
+    <message>
+        <source>Anonymity:</source>
+        <translation>Anonymität:</translation>
+    </message>
+    <message>
+        <source>Priority:</source>
+        <translation>Priorität:</translation>
+    </message>
+    <message>
+        <source>Manual fee override:</source>
+        <translation>Manuelle Gebühr überschreiben:</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Fortgeschritten</translation>
+    </message>
+    <message>
+        <source>Remote mode</source>
+        <translation>Remote Modus</translation>
+    </message>
+    <message>
+        <source>Send All</source>
+        <translation>Sende alles</translation>
     </message>
 </context>
 <context>
@@ -1102,6 +1213,37 @@ Möchten Sie die Download Seite besuchen?</translation>
     <message>
         <source>Close</source>
         <translation>Schliessen</translation>
+    </message>
+</context>
+<context>
+    <name>SignMessageDialog</name>
+    <message>
+        <source>Sign or verify message</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Schliessen</translation>
+    </message>
+    <message>
+        <source>Sign message</source>
+        <translation>Melden Sie die Nachricht</translation>
+    </message>
+    <message>
+        <source>Message</source>
+        <translation>Nachricht</translation>
+    </message>
+    <message>
+        <source>Signature</source>
+        <translation>Unterschrift</translation>
+    </message>
+    <message>
+        <source>Verify message</source>
+        <translation>Nachricht bestätigen</translation>
+    </message>
+    <message>
+        <source>Address</source>
+        <translation>Adresse</translation>
     </message>
 </context>
 <context>
@@ -1302,6 +1444,10 @@ Möchten Sie die Download Seite besuchen?</translation>
         <source>Contact with such label already exists.</source>
         <translation>Der Kontakt mit diesem Label existiert bereits.</translation>
     </message>
+    <message>
+        <source>&amp;Pay to</source>
+        <translation>&amp;Bezahlen Empfänger</translation>
+    </message>
 </context>
 <context>
     <name>WalletGui::AddressBookModel</name>
@@ -1422,11 +1568,11 @@ Externer Port für das P2P-Netzwerkprotokoll (wenn Portweiterleitung mit NAT ver
     <name>WalletGui::ExportTrackingKeyDialog</name>
     <message>
         <source>Save tracking key to...</source>
-        <translation>Tracking Key speichern unter...</translation>
+        <translation>Tracking Schlüssel speichern unter...</translation>
     </message>
     <message>
         <source>Tracking key (*.trackingkey)</source>
-        <translation>Tracking key (*.trackingkey)</translation>
+        <translation>Tracking Schlüssel (*.trackingkey)</translation>
     </message>
 </context>
 <context>
@@ -1449,6 +1595,10 @@ Externer Port für das P2P-Netzwerkprotokoll (wenn Portweiterleitung mit NAT ver
     <message>
         <source>Tracking wallets (*.trackingwallet)</source>
         <translation>Tracking wallets (*.trackingwallet)</translation>
+    </message>
+    <message>
+        <source>Tracking wallets (*.wallet)</source>
+        <translation>Brieftaschen (*.wallet)</translation>
     </message>
 </context>
 <context>
@@ -1657,6 +1807,18 @@ Bist du sicher?</translation>
         <source>Wrong wallet file extension, wallet file should have &quot;.wallet&quot;, &quot;.keys&quot; or &quot;.trackingwallet&quot; extension.</source>
         <translation>Falsche Wallet-Dateierweiterung, Wallet-Datei sollte die Erweiterung &quot;.wallet&quot;, &quot;.keys&quot; oder &quot;.trackingwallet&quot; haben.</translation>
     </message>
+    <message>
+        <source>Current Language changed to %1</source>
+        <translation type="obsolete">Aktuelle Sprache wurde in %1 geändert</translation>
+    </message>
+    <message>
+        <source>Language changed to %1. The change will take effect after restarting the wallet.</source>
+        <translation>Die Sprache wurde in %1 geändert. Die Änderung wird nach dem Neustart der Brieftasche wirksam.</translation>
+    </message>
+    <message>
+        <source>Language changed to %1</source>
+        <translation>Die Sprache wurde in %1 geändert</translation>
+    </message>
 </context>
 <context>
     <name>WalletGui::MiningFrame</name>
@@ -1773,6 +1935,66 @@ Bist du sicher?</translation>
         <source>Available balance is insufficient to send this transaction. Have you excluded a fee?</source>
         <translation>Der verfügbare Kontostand reicht nicht aus, um diese Transaktion zu senden. Haben Sie die Gebühr ausgeschlossen?</translation>
     </message>
+    <message>
+        <source>Low</source>
+        <translation>Niedrig</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normal</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>Hoch</translation>
+    </message>
+    <message>
+        <source>Highest</source>
+        <translation>Höchste</translation>
+    </message>
+    <message>
+        <source>Node fee: %1 %2</source>
+        <translation>Knotengebühr: %1 %2</translation>
+    </message>
+    <message>
+        <source>You have unmixable dust on balance. Use menu &apos;Wallet -&gt; Sweep unmixable&apos; first.</source>
+        <translation>Es gibt unmischbaren Staub im Gleichgewicht. Benutzen Sie zuerst das Menü &apos;Brieftasche -&gt; Unmischbare Beträge zusammenführen&apos;.</translation>
+    </message>
+</context>
+<context>
+    <name>WalletGui::SendGlassFrame</name>
+    <message>
+        <source>Synchronizing</source>
+        <translation>Synchronisieren</translation>
+    </message>
+    <message>
+        <source>You will be able to send %1
+when the wallet is synchronized</source>
+        <translation>Sie können  %1 senden
+wenn die Brieftasche die Synchronisation beendet</translation>
+    </message>
+</context>
+<context>
+    <name>WalletGui::SignMessageDialog</name>
+    <message>
+        <source>Sign message</source>
+        <translation>Melden Sie die Nachricht</translation>
+    </message>
+    <message>
+        <source>Verify signed message</source>
+        <translation>Überprüfen Sie die signierte Nachricht</translation>
+    </message>
+    <message>
+        <source>Signature is valid</source>
+        <translation>Unterschrift ist gültig</translation>
+    </message>
+    <message>
+        <source>Signature is invalid!</source>
+        <translation>Unterschrift ist ungültig!</translation>
+    </message>
+    <message>
+        <source>Address is invalid!</source>
+        <translation type="unfinished">Adresse ist ungültig!</translation>
+    </message>
 </context>
 <context>
     <name>WalletGui::TransactionDetailsDialog</name>
@@ -1810,6 +2032,32 @@ Bist du sicher?</translation>
             <numerusform>%n bestätigung(en)</numerusform>
             <numerusform>%n bestätigungen</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:&apos;Cantarell&apos;; font-size:11pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Status: &lt;/span&gt;%1&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Date: &lt;/span&gt;%2&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;To: &lt;/span&gt;%4&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Amount: &lt;/span&gt;%5&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Fee: &lt;/span&gt;%6&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Payment ID: &lt;/span&gt;%7&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Transaction Hash: &lt;/span&gt;%8&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Transaction Key: &lt;/span&gt;%9&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:&apos;Cantarell&apos;; font-size:11pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Status: &lt;/span&gt;%1&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Datum: &lt;/span&gt;%2&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;An: &lt;/span&gt;%4&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Menge: &lt;/span&gt;%5&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Gebühr: &lt;/span&gt;%6&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Payment ID: &lt;/span&gt;%7&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Transaktions hash: &lt;/span&gt;%8&lt;br&gt;
+&lt;span style=&quot; font-weight:600;&quot;&gt;Transaktions Schlüssel: &lt;/span&gt;%9&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>(n/a)</source>
+        <translation>(n/a)</translation>
     </message>
 </context>
 <context>
@@ -1972,6 +2220,10 @@ Bist du sicher?</translation>
             <numerusform>Ausgehende Transaktion, %n bestätigung</numerusform>
             <numerusform>Ausgehende Transaktion, %n bestätigungen</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>Key</source>
+        <translation>Schlüssel</translation>
     </message>
 </context>
 <context>

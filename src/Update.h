@@ -10,13 +10,17 @@
 #include <QNetworkReply>
 #include <QUrl>
 
-const static QString PLURACOIN_UPDATE_URL = "http://pluracoin.org/wallet_version.txt";
+const static QString PLURACOIN_UPDATE_URL = "http://pluracoin.com/wallet_version.txt";
 
 class Updater : public QObject
 {
     Q_OBJECT
 public:
     explicit Updater(QObject *parent = 0);
+
+    ~Updater() {
+        delete manager;
+    }
 
     void checkForUpdate();
 

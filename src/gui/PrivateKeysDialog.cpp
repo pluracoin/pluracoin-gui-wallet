@@ -6,9 +6,9 @@
 #include "ui_privatekeysdialog.h"
 #include <QClipboard>
 #include <Common/Base58.h>
+#include <Common/StringTools.h>
 #include "CurrencyAdapter.h"
 #include "WalletAdapter.h"
-#include <Common/StringTools.h>
 
 namespace WalletGui {
 
@@ -29,12 +29,14 @@ void PrivateKeysDialog::walletOpened() {
     std::string(reinterpret_cast<char*>(&keys), sizeof(keys))));
 
   m_ui->m_privateKeyEdit->setText(privateKeys);
-  //m_ui->m_qrLabel->showQRCode(privateKeys);
+//m_ui->m_qrLabel->showQRCode(privateKeys);
+
   QString spendSecretKey = QString::fromStdString(Common::podToHex(keys.spendSecretKey));
   QString viewSecretKey = QString::fromStdString(Common::podToHex(keys.viewSecretKey));
 
   m_ui->m_spendSecretKeyEdit->setText(spendSecretKey);
   m_ui->m_viewSecretKeyEdit->setText(viewSecretKey);
+
 }
 
 void PrivateKeysDialog::walletClosed() {

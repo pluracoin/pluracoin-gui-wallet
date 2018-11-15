@@ -94,22 +94,6 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="0">
-     <widget class="WalletGui::OverviewFrame" name="m_overviewFrame">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="frameShape">
-       <enum>QFrame::NoFrame</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Raised</enum>
-      </property>
-     </widget>
-    </item>
     <item row="1" column="3">
      <widget class="WalletGui::TransactionsFrame" name="m_transactionsFrame">
       <property name="sizePolicy">
@@ -126,8 +110,8 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="1">
-     <widget class="WalletGui::SendFrame" name="m_sendFrame">
+    <item row="1" column="0">
+     <widget class="WalletGui::OverviewFrame" name="m_overviewFrame">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
         <horstretch>0</horstretch>
@@ -139,6 +123,16 @@
       </property>
       <property name="frameShadow">
        <enum>QFrame::Raised</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="5">
+     <widget class="WalletGui::NoWalletFrame" name="m_noWalletFrame" native="true">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
       </property>
      </widget>
     </item>
@@ -158,8 +152,8 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="5">
-     <widget class="WalletGui::MiningFrame" name="m_miningFrame">
+    <item row="1" column="1">
+     <widget class="WalletGui::SendFrame" name="m_sendFrame">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
         <horstretch>0</horstretch>
@@ -215,20 +209,13 @@
     <addaction name="m_openWalletAction"/>
     <addaction name="menuRecent_wallets"/>
     <addaction name="m_backupWalletAction"/>
-    <addaction name="m_resetAction"/>
     <addaction name="m_closeWalletAction"/>
     <addaction name="separator"/>
     <addaction name="m_openUriAction"/>
     <addaction name="m_openLogFileAction"/>
     <addaction name="separator"/>
-    <addaction name="m_showMnemonicSeedAction"/>
-    <addaction name="m_restoreFromMnemonicSeedAction"/>
-    <addaction name="separator"/>
-    <addaction name="m_showPrivateKey"/>
-    <addaction name="m_importKeyAction"/>
-    <addaction name="separator"/>
-    <addaction name="m_exportTrackingKeyAction"/>
-    <addaction name="m_importTrackingKeyAction"/>
+    <addaction name="m_signMessageAction"/>
+    <addaction name="m_verifySignedMessageAction"/>
     <addaction name="separator"/>
     <addaction name="m_exitAction"/>
    </widget>
@@ -236,15 +223,17 @@
     <property name="title">
      <string>Settings</string>
     </property>
-    <addaction name="m_encryptWalletAction"/>
-    <addaction name="m_changePasswordAction"/>
-    <addaction name="m_changeLanguageAction"/>
+    <widget class="QMenu" name="menuLanguage">
+     <property name="title">
+      <string>Language</string>
+     </property>
+    </widget>
+    <addaction name="menuLanguage"/>
     <addaction name="m_connectionSettingsAction"/>
     <addaction name="separator"/>
     <addaction name="m_startOnLoginAction"/>
     <addaction name="m_minimizeToTrayAction"/>
     <addaction name="m_closeToTrayAction"/>
-    <addaction name="m_miningOnLaunchAction"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -254,7 +243,35 @@
     <addaction name="m_aboutQtAction"/>
     <addaction name="actionHelp"/>
    </widget>
+   <widget class="QMenu" name="menuWallet">
+    <property name="title">
+     <string>Wallet</string>
+    </property>
+    <addaction name="m_encryptWalletAction"/>
+    <addaction name="m_changePasswordAction"/>
+    <addaction name="m_sweepUnmixableAction"/>
+    <addaction name="separator"/>
+    <addaction name="m_showMnemonicSeedAction"/>
+    <addaction name="m_showPrivateKey"/>
+    <addaction name="m_exportTrackingKeyAction"/>
+    <addaction name="separator"/>
+    <addaction name="m_restoreFromMnemonicSeedAction"/>
+    <addaction name="m_importKeyAction"/>
+    <addaction name="m_importTrackingKeyAction"/>
+    <addaction name="separator"/>
+    <addaction name="m_resetAction"/>
+   </widget>
+   <widget class="QMenu" name="menuTrade_PLURA">
+    <property name="title">
+     <string>Trade PLURA</string>
+    </property>
+    <addaction name="actionTradeOgre_Exchange"/>
+    <addaction name="actionCREX24_Exchange"/>
+    <addaction name="actionBTCSquare_Exchange"/>
+   </widget>
    <addaction name="menuFile"/>
+   <addaction name="menuWallet"/>
+   <addaction name="menuTrade_PLURA"/>
    <addaction name="menuSettings"/>
    <addaction name="menuHelp"/>
   </widget>
@@ -285,9 +302,7 @@
    </property>
    <property name="font">
     <font>
-     <pointsize>10</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
+     <pointsize>8</pointsize>
     </font>
    </property>
    <property name="windowTitle">
@@ -322,7 +337,7 @@
    <addaction name="m_receiveAction"/>
    <addaction name="m_transactionsAction"/>
    <addaction name="m_addressBookAction"/>
-   <addaction name="m_miningAction"/>
+   <addaction name="m_miningURLAction"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
   <widget class="QToolBar" name="accountToolBar">
@@ -510,12 +525,12 @@
     <string>Import private key</string>
    </property>
   </action>
-  <action name="m_miningAction">
+  <action name="m_miningURLAction">
    <property name="checkable">
     <bool>true</bool>
    </property>
    <property name="icon">
-    <iconset resource="../../resources.qrc">
+    <iconset>
      <normaloff>:/icons/mining</normaloff>:/icons/mining</iconset>
    </property>
    <property name="text">
@@ -528,14 +543,6 @@
    </property>
    <property name="toolTip">
     <string>Reset wallet</string>
-   </property>
-  </action>
-  <action name="m_changeLanguageAction">
-   <property name="text">
-    <string>Language</string>
-   </property>
-   <property name="toolTip">
-    <string>Change language</string>
    </property>
   </action>
   <action name="m_showPrivateKey">
@@ -593,7 +600,7 @@
   </action>
   <action name="m_showMnemonicSeedAction">
    <property name="enabled">
-    <bool>false</bool>
+    <bool>true</bool>
    </property>
    <property name="text">
     <string>Show mnemonic seed</string>
@@ -609,17 +616,40 @@
     <string>Create nondeterministic wallet</string>
    </property>
   </action>
-  <action name="m_miningOnLaunchAction">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
+  <action name="m_sweepUnmixableAction">
    <property name="text">
-    <string>Start pool mining automatically</string>
+    <string>Sweep unmixable</string>
+   </property>
+   <property name="visible">
+    <bool>false</bool>
+   </property>
+   <property name="iconVisibleInMenu">
+    <bool>false</bool>
    </property>
   </action>
-  <action name="actionOpen_data_location">
+  <action name="m_signMessageAction">
    <property name="text">
-    <string>Open data location</string>
+    <string>Sign message</string>
+   </property>
+  </action>
+  <action name="m_verifySignedMessageAction">
+   <property name="text">
+    <string>Verify signed message</string>
+   </property>
+  </action>
+  <action name="actionTradeOgre_Exchange">
+   <property name="text">
+    <string>TradeOgre Exchange</string>
+   </property>
+  </action>
+  <action name="actionCREX24_Exchange">
+   <property name="text">
+    <string>CREX24 Exchange</string>
+   </property>
+  </action>
+  <action name="actionBTCSquare_Exchange">
+   <property name="text">
+    <string>BTCSquare Exchange</string>
    </property>
   </action>
  </widget>
@@ -635,6 +665,11 @@
    <extends>QFrame</extends>
    <header>gui/SendFrame.h</header>
    <container>1</container>
+   <slots>
+    <slot>openBtcSquare()</slot>
+    <slot>openCrex24()</slot>
+    <slot>openTradeOgre()</slot>
+   </slots>
   </customwidget>
   <customwidget>
    <class>WalletGui::AccountFrame</class>
@@ -655,15 +690,15 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>WalletGui::MiningFrame</class>
-   <extends>QFrame</extends>
-   <header>gui/MiningFrame.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
    <class>WalletGui::ReceiveFrame</class>
    <extends>QFrame</extends>
    <header>gui/ReceiveFrame.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>WalletGui::NoWalletFrame</class>
+   <extends>QWidget</extends>
+   <header>gui/NoWalletFrame.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
@@ -724,22 +759,6 @@
    <signal>triggered()</signal>
    <receiver>MainWindow</receiver>
    <slot>encryptWallet()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>-1</x>
-     <y>-1</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>449</x>
-     <y>299</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>m_changeLanguageAction</sender>
-   <signal>triggered()</signal>
-   <receiver>MainWindow</receiver>
-   <slot>ChangeLanguage()</slot>
    <hints>
     <hint type="sourcelabel">
      <x>-1</x>
@@ -938,8 +957,8 @@
      <y>-1</y>
     </hint>
     <hint type="destinationlabel">
-     <x>787</x>
-     <y>333</y>
+     <x>686</x>
+     <y>436</y>
     </hint>
    </hints>
   </connection>
@@ -976,22 +995,6 @@
    </hints>
   </connection>
   <connection>
-   <sender>m_miningAction</sender>
-   <signal>toggled(bool)</signal>
-   <receiver>m_miningFrame</receiver>
-   <slot>setVisible(bool)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>-1</x>
-     <y>-1</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>862</x>
-     <y>322</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>m_addressBookAction</sender>
    <signal>toggled(bool)</signal>
    <receiver>m_addressBookFrame</receiver>
@@ -1018,8 +1021,8 @@
      <y>-1</y>
     </hint>
     <hint type="destinationlabel">
-     <x>562</x>
-     <y>333</y>
+     <x>540</x>
+     <y>436</y>
     </hint>
    </hints>
   </connection>
@@ -1152,10 +1155,106 @@
    </hints>
   </connection>
   <connection>
-   <sender>m_miningOnLaunchAction</sender>
-   <signal>triggered(bool)</signal>
+   <sender>m_signMessageAction</sender>
+   <signal>triggered()</signal>
    <receiver>MainWindow</receiver>
-   <slot>setMiningOnLaunch(bool)</slot>
+   <slot>signMessage()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>489</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>m_verifySignedMessageAction</sender>
+   <signal>triggered()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>verifyMessage()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>489</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>m_sweepUnmixableAction</sender>
+   <signal>triggered()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>sweepUnmixable()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>489</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>m_miningURLAction</sender>
+   <signal>triggered()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>openMiningURL()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>489</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionBTCSquare_Exchange</sender>
+   <signal>triggered()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>openBtcSquare()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>489</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionCREX24_Exchange</sender>
+   <signal>triggered()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>openCrex24()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>489</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionTradeOgre_Exchange</sender>
+   <signal>triggered()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>openTradeOgre()</slot>
    <hints>
     <hint type="sourcelabel">
      <x>-1</x>
@@ -1183,5 +1282,10 @@
   <slot>showPrivateKeys()</slot>
   <slot>openConnectionSettings()</slot>
   <slot>showStatusInfo()</slot>
+  <slot>sweepUnmixable()</slot>
+  <slot>openMiningURL()</slot>
+  <slot>openBtcSquare()</slot>
+  <slot>openCrex24()</slot>
+  <slot>openTradeOgre()</slot>
  </slots>
 </ui>

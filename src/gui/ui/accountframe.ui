@@ -22,14 +22,8 @@
     <height>71</height>
    </size>
   </property>
-  <property name="cursor">
-   <cursorShape>IBeamCursor</cursorShape>
-  </property>
   <property name="windowTitle">
    <string>Frame</string>
-  </property>
-  <property name="windowOpacity">
-   <double>0.950000000000000</double>
   </property>
   <property name="frameShape">
    <enum>QFrame::StyledPanel</enum>
@@ -127,7 +121,7 @@
           </size>
          </property>
          <property name="cursor">
-          <cursorShape>ArrowCursor</cursorShape>
+          <cursorShape>IBeamCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Your receiving address</string>
@@ -241,8 +235,8 @@
          <property name="font">
           <font>
            <pointsize>13</pointsize>
-           <weight>75</weight>
-           <bold>true</bold>
+           <weight>50</weight>
+           <bold>false</bold>
           </font>
          </property>
          <property name="toolTip">

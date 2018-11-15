@@ -199,6 +199,10 @@ public:
     return m_node.getPeerCount();
   }
 
+  uint64_t getMinimalFee() {
+    return m_node.getMinimalFee();
+  }
+
   uint64_t getDifficulty() {
     try {
         CryptoNote::COMMAND_RPC_GET_INFO::request req;
@@ -397,6 +401,14 @@ public:
         }
   }
 
+  CryptoNote::BlockHeaderInfo getLastLocalBlockHeaderInfo() {
+    return m_node.getLastLocalBlockHeaderInfo();
+  }
+
+  uint8_t getCurrentBlockMajorVersion() {
+    return getLastLocalBlockHeaderInfo().majorVersion;
+  }
+
   CryptoNote::IWalletLegacy* createWallet() override {
     return new CryptoNote::WalletLegacy(m_currency, m_node, m_logManager);
   }
@@ -436,6 +448,7 @@ public:
     m_node(m_core, m_protocolHandler) {
 
       CryptoNote::Checkpoints checkpoints(logManager);
+      checkpoints.load_checkpoints_from_dns(Settings::instance().isTestnet());
       for (const CryptoNote::CheckpointData& checkpoint : CryptoNote::CHECKPOINTS) {
         checkpoints.add_checkpoint(checkpoint.height, checkpoint.blockId);
       }
@@ -553,6 +566,18 @@ public:
 
   uint64_t getGreyPeerlistSize() {
     return m_nodeServer.getPeerlistManager().get_gray_peers_count();
+  }
+
+  uint64_t getMinimalFee() {
+    return m_core.getMinimalFee();
+  }
+
+  CryptoNote::BlockHeaderInfo getLastLocalBlockHeaderInfo() {
+    return m_node.getLastLocalBlockHeaderInfo();
+  }
+
+  uint8_t getCurrentBlockMajorVersion() {
+    return getLastLocalBlockHeaderInfo().majorVersion;
   }
 
   CryptoNote::IWalletLegacy* createWallet() override {
