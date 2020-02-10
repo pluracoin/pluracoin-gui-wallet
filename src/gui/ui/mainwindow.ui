@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>980</width>
-    <height>550</height>
+    <width>1250</width>
+    <height>600</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -191,17 +191,20 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>980</width>
-     <height>21</height>
+     <width>1250</width>
+     <height>34</height>
     </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">background-color: rgb(218, 218, 218);</string>
    </property>
    <widget class="QMenu" name="menuFile">
     <property name="title">
-     <string>File</string>
+     <string>Fi&amp;le</string>
     </property>
     <widget class="QMenu" name="menuRecent_wallets">
      <property name="title">
-      <string>Recent wallets</string>
+      <string>&amp;Recent wallets</string>
      </property>
     </widget>
     <addaction name="m_createWalletAction"/>
@@ -221,11 +224,11 @@
    </widget>
    <widget class="QMenu" name="menuSettings">
     <property name="title">
-     <string>Settings</string>
+     <string>Setti&amp;ngs</string>
     </property>
     <widget class="QMenu" name="menuLanguage">
      <property name="title">
-      <string>Language</string>
+      <string>&amp;Language</string>
      </property>
     </widget>
     <addaction name="menuLanguage"/>
@@ -263,11 +266,11 @@
    </widget>
    <widget class="QMenu" name="menuTrade_PLURA">
     <property name="title">
-     <string>Trade PLURA</string>
+     <string>Trade PL&amp;URA</string>
     </property>
+    <addaction name="actionBTCSquare_Exchange"/>
     <addaction name="actionTradeOgre_Exchange"/>
     <addaction name="actionCREX24_Exchange"/>
-    <addaction name="actionBTCSquare_Exchange"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuWallet"/>
@@ -416,7 +419,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Exit</string>
+    <string>&amp;Exit</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Q</string>
@@ -442,7 +445,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Create wallet</string>
+    <string>&amp;Create wallet</string>
    </property>
   </action>
   <action name="m_openWalletAction">
@@ -450,7 +453,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Open wallet</string>
+    <string>&amp;Open wallet</string>
    </property>
   </action>
   <action name="m_encryptWalletAction">
@@ -458,7 +461,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Encrypt wallet</string>
+    <string>&amp;Encrypt wallet</string>
    </property>
   </action>
   <action name="m_changePasswordAction">
@@ -466,7 +469,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Change password</string>
+    <string>&amp;Change password</string>
    </property>
    <property name="toolTip">
     <string>Change password</string>
@@ -477,7 +480,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>About</string>
+    <string>&amp;About</string>
    </property>
   </action>
   <action name="m_aboutQtAction">
@@ -485,7 +488,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>About Qt</string>
+    <string>About &amp;Qt</string>
    </property>
   </action>
   <action name="m_backupWalletAction">
@@ -493,7 +496,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Backup wallet</string>
+    <string>&amp;Backup wallet</string>
    </property>
   </action>
   <action name="m_startOnLoginAction">
@@ -501,7 +504,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Start on system login</string>
+    <string>&amp;Start on system login</string>
    </property>
   </action>
   <action name="m_minimizeToTrayAction">
@@ -509,7 +512,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Minimize to tray</string>
+    <string>&amp;Minimize to tray</string>
    </property>
   </action>
   <action name="m_closeToTrayAction">
@@ -517,12 +520,12 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Close to tray</string>
+    <string>Cl&amp;ose to tray</string>
    </property>
   </action>
   <action name="m_importKeyAction">
    <property name="text">
-    <string>Import private key</string>
+    <string>&amp;Import private key</string>
    </property>
   </action>
   <action name="m_miningURLAction">
@@ -530,7 +533,7 @@
     <bool>true</bool>
    </property>
    <property name="icon">
-    <iconset>
+    <iconset resource="../../resources.qrc">
      <normaloff>:/icons/mining</normaloff>:/icons/mining</iconset>
    </property>
    <property name="text">
@@ -539,7 +542,7 @@
   </action>
   <action name="m_resetAction">
    <property name="text">
-    <string>Reset wallet</string>
+    <string>Reset &amp;wallet</string>
    </property>
    <property name="toolTip">
     <string>Reset wallet</string>
@@ -547,12 +550,12 @@
   </action>
   <action name="m_showPrivateKey">
    <property name="text">
-    <string>Export private key</string>
+    <string>Export &amp;private key</string>
    </property>
   </action>
   <action name="actionHelp">
    <property name="text">
-    <string>Help</string>
+    <string>&amp;Help</string>
    </property>
    <property name="shortcut">
     <string>F1</string>
@@ -560,27 +563,27 @@
   </action>
   <action name="m_connectionSettingsAction">
    <property name="text">
-    <string>Connection</string>
+    <string>&amp;Connection</string>
    </property>
   </action>
   <action name="m_openUriAction">
    <property name="text">
-    <string>Open payment request</string>
+    <string>Open &amp;payment request</string>
    </property>
   </action>
   <action name="m_exportTrackingKeyAction">
    <property name="text">
-    <string>Export tracking key</string>
+    <string>Export tracking &amp;key</string>
    </property>
   </action>
   <action name="m_importTrackingKeyAction">
    <property name="text">
-    <string>Import tracking key</string>
+    <string>Imp&amp;ort tracking key</string>
    </property>
   </action>
   <action name="m_closeWalletAction">
    <property name="text">
-    <string>Close wallet</string>
+    <string>Close &amp;wallet</string>
    </property>
   </action>
   <action name="m_recentWalletsAction">
@@ -595,7 +598,7 @@
   </action>
   <action name="m_openLogFileAction">
    <property name="text">
-    <string>Open log file</string>
+    <string>Open &amp;log file</string>
    </property>
   </action>
   <action name="m_showMnemonicSeedAction">
@@ -603,22 +606,22 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Show mnemonic seed</string>
+    <string>Show &amp;mnemonic seed</string>
    </property>
   </action>
   <action name="m_restoreFromMnemonicSeedAction">
    <property name="text">
-    <string>Restore from mnemonic seed</string>
+    <string>&amp;Restore from mnemonic seed</string>
    </property>
   </action>
   <action name="m_createNondeterministicWalletAction">
    <property name="text">
-    <string>Create nondeterministic wallet</string>
+    <string>Create &amp;nondeterministic wallet</string>
    </property>
   </action>
   <action name="m_sweepUnmixableAction">
    <property name="text">
-    <string>Sweep unmixable</string>
+    <string>&amp;Sweep unmixable</string>
    </property>
    <property name="visible">
     <bool>false</bool>
@@ -629,27 +632,27 @@
   </action>
   <action name="m_signMessageAction">
    <property name="text">
-    <string>Sign message</string>
+    <string>&amp;Sign message</string>
    </property>
   </action>
   <action name="m_verifySignedMessageAction">
    <property name="text">
-    <string>Verify signed message</string>
+    <string>&amp;Verify signed message</string>
    </property>
   </action>
   <action name="actionTradeOgre_Exchange">
    <property name="text">
-    <string>TradeOgre Exchange</string>
+    <string>&amp;TradeOgre Exchange</string>
    </property>
   </action>
   <action name="actionCREX24_Exchange">
    <property name="text">
-    <string>CREX24 Exchange</string>
+    <string>&amp;CREX24 Exchange</string>
    </property>
   </action>
   <action name="actionBTCSquare_Exchange">
    <property name="text">
-    <string>BTCSquare Exchange</string>
+    <string>&amp;BTCsquare Exchange</string>
    </property>
   </action>
  </widget>

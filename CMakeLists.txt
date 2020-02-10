@@ -5,7 +5,7 @@ include(QREncode.cmake)
 
 project(${CN_PROJECT_NAME})
 
-set(CMAKE_EXE_LINKER_FLAGS "/MANIFEST:NO")
+#set(CMAKE_EXE_LINKER_FLAGS "/MANIFEST:NO")
 
 execute_process(COMMAND git log -1 --pretty=format:%h
 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
