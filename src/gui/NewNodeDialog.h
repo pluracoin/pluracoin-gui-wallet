@@ -1,6 +1,6 @@
 // Copyright (c) 2011-2016 The Cryptonote developers
 // Copyright (c) 2015-2016 XDN developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016-2020 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,9 +23,14 @@ public:
 
   QString getHost() const;
   quint16 getPort() const;
+  QString getPath() const;
+  bool getEnableSSL() const;
 
 private:
   QScopedPointer<Ui::NewNodeDialog> m_ui;
+
+private slots:
+  void enableSSLstateChanged(const int state);
 };
 
 }

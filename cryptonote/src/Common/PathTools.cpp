@@ -1,22 +1,23 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "PathTools.h"
 #include <algorithm>
+#include <boost/filesystem.hpp>
 
 namespace {
 
@@ -77,7 +78,7 @@ void SplitPath(const std::string& path, std::string& directory, std::string& fil
 }
 
 std::string CombinePath(const std::string& path1, const std::string& path2) {
-  return path1 + GENERIC_PATH_SEPARATOR + path2;
+  return path1.empty() ? path2 : path1 + GENERIC_PATH_SEPARATOR + path2;
 }
 
 std::string ReplaceExtenstion(const std::string& path, const std::string& extension) {
@@ -107,5 +108,21 @@ bool HasParentPath(const std::string& path) {
   return path.find(GENERIC_PATH_SEPARATOR) != std::string::npos;
 }
 
+bool validateCertPath(std::string& path) {
+  bool res = false;
+  boost::system::error_code ec;
+  boost::filesystem::path data_dir_path(boost::filesystem::current_path());
+  boost::filesystem::path cert_file_path(path);
+  if (!cert_file_path.has_parent_path()) cert_file_path = data_dir_path / cert_file_path;
+  if (boost::filesystem::exists(cert_file_path, ec)) {
+    path = boost::filesystem::canonical(cert_file_path).string();
+    res = true;
+  }
+  else {
+    path.clear();
+    res = false;
+  }
+  return res;
+}
 
 }

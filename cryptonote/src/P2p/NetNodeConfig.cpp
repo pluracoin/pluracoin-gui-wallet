@@ -1,43 +1,32 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "NetNodeConfig.h"
 
+#include <fstream>
 #include <boost/utility/value_init.hpp>
 
 #include <Common/Util.h>
-#include "Common/CommandLine.h"
 #include "Common/StringTools.h"
 #include "crypto/crypto.h"
-#include "CryptoNoteConfig.h"
+#include "crypto/random.h"
 
 namespace CryptoNote {
 namespace {
-
-const command_line::arg_descriptor<std::string> arg_p2p_bind_ip        = {"p2p-bind-ip", "Interface for p2p network protocol", "0.0.0.0"};
-const command_line::arg_descriptor<uint16_t>    arg_p2p_bind_port      = {"p2p-bind-port", "Port for p2p network protocol", P2P_DEFAULT_PORT};
-const command_line::arg_descriptor<uint16_t>    arg_p2p_external_port = { "p2p-external-port", "External port for p2p network protocol (if port forwarding used with NAT)", 0 };
-const command_line::arg_descriptor<bool>        arg_p2p_allow_local_ip = {"allow-local-ip", "Allow local ip add to peer list, mostly in debug purposes"};
-const command_line::arg_descriptor<std::vector<std::string> > arg_p2p_add_peer   = {"add-peer", "Manually add peer to local peerlist"};
-const command_line::arg_descriptor<std::vector<std::string> > arg_p2p_add_priority_node   = {"add-priority-node", "Specify list of peers to connect to and attempt to keep the connection open"};
-const command_line::arg_descriptor<std::vector<std::string> > arg_p2p_add_exclusive_node   = {"add-exclusive-node", "Specify list of peers to connect to only."
-      " If this option is given the options add-priority-node and seed-node are ignored"};
-const command_line::arg_descriptor<std::vector<std::string> > arg_p2p_seed_node   = {"seed-node", "Connect to a node to retrieve peer addresses, and disconnect"};
-const command_line::arg_descriptor<bool> arg_p2p_hide_my_port   =    {"hide-my-port", "Do not announce yourself as peerlist candidate", false, true};
 
 bool parsePeerFromString(NetworkAddress& pe, const std::string& node_addr) {
   return Common::parseIpAddressAndPort(pe.ip, pe.port, node_addr);
@@ -70,7 +59,9 @@ void NetNodeConfig::initOptions(boost::program_options::options_description& des
   command_line::add_arg(desc, arg_p2p_add_priority_node);
   command_line::add_arg(desc, arg_p2p_add_exclusive_node);
   command_line::add_arg(desc, arg_p2p_seed_node);
+  command_line::add_arg(desc, arg_ban_list);
   command_line::add_arg(desc, arg_p2p_hide_my_port);
+  command_line::add_arg(desc, arg_connections_count);
 }
 
 NetNodeConfig::NetNodeConfig() {
@@ -81,6 +72,7 @@ NetNodeConfig::NetNodeConfig() {
   hideMyPort = false;
   configFolder = Tools::getDefaultDataDirectory();
   testnet = false;
+  connectionsCount = CryptoNote::P2P_DEFAULT_CONNECTIONS_COUNT;
 }
 
 bool NetNodeConfig::init(const boost::program_options::variables_map& vm)
@@ -111,7 +103,7 @@ bool NetNodeConfig::init(const boost::program_options::variables_map& vm)
     std::vector<std::string> perrs = command_line::get_arg(vm, arg_p2p_add_peer);
     for(const std::string& pr_str: perrs) {
       PeerlistEntry pe = boost::value_initialized<PeerlistEntry>();
-      pe.id = Crypto::rand<uint64_t>();
+      pe.id = Random::randomValue<uint64_t>();
       if (!parsePeerFromString(pe.adr, pr_str)) {
         return false;
       }
@@ -139,6 +131,27 @@ bool NetNodeConfig::init(const boost::program_options::variables_map& vm)
     hideMyPort = true;
   }
 
+  if (command_line::has_arg(vm, CryptoNote::arg_ban_list)) {
+    const std::string ban_list_file = command_line::get_arg(vm, CryptoNote::arg_ban_list);
+
+    std::ifstream file(ban_list_file);
+    if (!file) {
+      throw std::runtime_error("Failed to read ban list file " + ban_list_file);
+      return false;
+    }
+
+    for (std::string line; std::getline(file, line); )
+    {
+      uint32_t parsed_addr = Common::stringToIpAddress(line);
+      if (!parsed_addr) {
+        continue; // silently skip because no logging here
+      }
+      banList.push_back(parsed_addr);
+    }
+  }
+  if (command_line::has_arg(vm, CryptoNote::arg_connections_count)) {
+    connectionsCount = command_line::get_arg(vm, arg_connections_count);
+  }
   return true;
 }
 
@@ -190,12 +203,20 @@ std::vector<NetworkAddress> NetNodeConfig::getSeedNodes() const {
   return seedNodes;
 }
 
+std::vector<uint32_t> NetNodeConfig::getBanList() const {
+  return banList;
+}
+
 bool NetNodeConfig::getHideMyPort() const {
   return hideMyPort;
 }
 
 std::string NetNodeConfig::getConfigFolder() const {
   return configFolder;
+}
+
+uint32_t NetNodeConfig::getConnectionsCount() const {
+  return connectionsCount;
 }
 
 void NetNodeConfig::setP2pStateFilename(const std::string& filename) {
@@ -242,5 +263,8 @@ void NetNodeConfig::setConfigFolder(const std::string& folder) {
   configFolder = folder;
 }
 
+void NetNodeConfig::setConnectionsCount(uint32_t count) {
+  connectionsCount = count;
+}
 
 } //namespace nodetool

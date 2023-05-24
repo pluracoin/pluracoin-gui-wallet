@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2015 The Cryptonote developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016-2018 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,7 +22,7 @@ CurrencyAdapter::CurrencyAdapter() : m_currency(CryptoNote::CurrencyBuilder(Logg
 CurrencyAdapter::~CurrencyAdapter() {
 }
 
-const CryptoNote::Currency& CurrencyAdapter::getCurrency() {
+CryptoNote::Currency& CurrencyAdapter::getCurrency() {
   return m_currency;
 }
 
@@ -123,7 +123,7 @@ CryptoNote::AccountPublicAddress CurrencyAdapter::internalAddress(const QString&
 
 QString CurrencyAdapter::generatePaymentId() const {
   Crypto::Hash payment_id;
-  payment_id = Crypto::rand<Crypto::Hash>();
+  Random::randomBytes(32, payment_id.data);
   return QString::fromStdString(Common::podToHex(payment_id));
 }
 

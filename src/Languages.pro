@@ -35,11 +35,11 @@ gui/AnimatedLabel.cpp \
 gui/ChangePasswordDialog.cpp \
 gui/ExitWidget.cpp \
 gui/ImportKeyDialog.cpp \
+gui/ImportKeysDialog.cpp \
 gui/MainWindow.cpp \
 gui/MiningFrame.cpp \
 gui/NewAddressDialog.cpp \
 gui/NewPasswordDialog.cpp \
-gui/NewPoolDialog.cpp \
 gui/OverviewFrame.cpp \
 gui/PasswordDialog.cpp \
 gui/PoolModel.cpp \
@@ -54,22 +54,31 @@ gui/TransactionsFrame.cpp \
 gui/TransactionsListModel.cpp \
 gui/TransactionsModel.cpp \
 gui/TransferFrame.cpp \
-update.cpp \
+Update.cpp \
 gui/ConnectionSettings.cpp \
 gui/NewNodeDialog.cpp \
 gui/NodeModel.cpp \
 gui/QRLabel.cpp \
+gui/QRCodeDialog.cpp \
 gui/OpenUriDialog.cpp \
 gui/ConfirmSendDialog.cpp \
 gui/ExportTrackingKeyDialog.cpp \
 gui/ImportTrackingKeyDialog.cpp \
 gui/InfoDialog.cpp \
+gui/ConnectionsModel.cpp \
 gui/MnemonicSeedDialog.cpp \
 gui/RestoreFromMnemonicSeedDialog.cpp \
 gui/VerifyMnemonicSeedDialog.cpp \
 gui/NoWalletFrame.cpp \
 gui/SendGlassFrame.cpp \
 gui/SignMessageDialog.cpp \
+gui/OptimizationSettings.cpp \
+gui/GetBalanceProofDialog.cpp \
+gui/ExportRawTxDialog.cpp \
+gui/CoinsFrame.cpp \
+gui/OutputsModel.cpp \
+gui/OutputDetailsDialog.cpp \
+gui/WalletRpcSettings.cpp \
  
 
 HEADERS = CommandLineParser.h \
@@ -93,6 +102,7 @@ gui/AnimatedLabel.h \
 gui/ChangePasswordDialog.h \
 gui/ExitWidget.h \
 gui/ImportKeyDialog.h \
+gui/ImportKeysDialog.h \
 gui/MainWindow.h \
 gui/MiningFrame.h \
 gui/NewAddressDialog.h \
@@ -118,17 +128,26 @@ gui/ConnectionSettings.h \
 gui/NewNodeDialog.h \
 gui/NodeModel.h \
 gui/QRLabel.h \
+gui/QRCodeDialog.h \
 gui/OpenUriDialog.h \
 gui/ConfirmSendDialog.h \
 gui/ExportTrackingKeyDialog.h \
 gui/ImportTrackingKeyDialog.h \
 gui/InfoDialog.h \
+gui/ConnectionsModel.h \
 gui/MnemonicSeedDialog.h \
 gui/RestoreFromMnemonicSeedDialog.h \
 gui/VerifyMnemonicSeedDialog.h \
 gui/NoWalletFrame.h \
 gui/SendGlassFrame.h \
 gui/SignMessageDialog.h \
+gui/OptimizationSettings.h \
+gui/GetBalanceProofDialog.h \
+gui/ExportRawTxDialog.h \
+gui/CoinsFrame.h \
+gui/OutputsModel.h \
+gui/OutputDetailsDialog.h \
+gui/WalletRpcSettings.h \
 
 
 FORMS = gui/ui/aboutdialog.ui \
@@ -137,6 +156,7 @@ gui/ui/addressbookframe.ui \
 gui/ui/changepassworddialog.ui \
 gui/ui/exitwidget.ui \
 gui/ui/importkeydialog.ui \
+gui/ui/importkeysdialog.ui \
 gui/ui/mainwindow.ui \
 gui/ui/miningframe.ui \
 gui/ui/newaddressdialog.ui \
@@ -157,6 +177,7 @@ gui/ui/connectionsettingsdialog.ui \
 gui/ui/newnodedialog.ui \
 gui/ui/showpaymentrequest.ui \
 gui/ui/openuridialog.ui \
+gui/ui/qrcodedialog.ui \
 gui/ui/confirmsenddialog.ui \
 gui/ui/importtrackingkeydialog.ui \
 gui/ui/exporttrackingkeydialog.ui \
@@ -166,11 +187,24 @@ gui/ui/restorefrommnemonicseeddialog.ui \
 gui/ui/verifymnemonicseeddialog.ui \
 gui/ui/nowalletframe.ui \
 gui/ui/signmessagedialog.ui \
+gui/ui/optimizationsettingsdialog.ui \
+gui/ui/getbalanceproofdialog.ui \
+gui/ui/exportrawtxdialog.ui \
+gui/ui/coinsframe.ui \
+gui/ui/outputdetailsdialog.ui \
+gui/ui/walletrpcsettingsdialog.ui \
 
 
-TRANSLATIONS = 	languages/uk.ts \												
+TRANSLATIONS = 	languages/uk.ts \
+				languages/pl.ts \
+				languages/be.ts \
 				languages/de.ts \
 				languages/es.ts \
 				languages/fr.ts \
 				languages/pt.ts \
+				languages/ja.ts \
+				languages/it.ts \
+				languages/ko.ts \
 				languages/zh.ts \
+				languages/hi.ts \
+				languages/ar.ts \

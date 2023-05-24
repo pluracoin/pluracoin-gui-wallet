@@ -1,11 +1,17 @@
 // Copyright (c) 2011-2015 The Cryptonote developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016-2022 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <limits>
+#include <future>
 #include "CryptoNoteWrapper.h"
+#include "Checkpoints/Checkpoints.h"
+#include "Checkpoints/CheckpointsData.h"
+#include "Common/StringTools.h"
 #include "CryptoNoteCore/CryptoNoteBasicImpl.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
+#include "CryptoNoteCore/CryptoNoteTools.h"
 #include "CryptoNoteCore/Currency.h"
 #include "NodeRpcProxy/NodeRpcProxy.h"
 #include "CryptoNoteCore/CoreConfig.h"
@@ -13,17 +19,22 @@
 #include "CryptoNoteCore/Core.h"
 #include "CryptoNoteCore/Miner.h"
 #include "CryptoNoteCore/MinerConfig.h"
+#include "CryptoNoteCore/TransactionExtra.h"
 #include "Rpc/CoreRpcServerCommandsDefinitions.h"
-#include "Rpc/HttpClient.h"
+#include "Rpc/RpcServer.h"
+#include "Rpc/JsonRpc.h"
 #include "CryptoNoteProtocol/CryptoNoteProtocolHandler.h"
 #include "InProcessNode/InProcessNode.h"
 #include "P2p/NetNode.h"
 #include "WalletLegacy/WalletLegacy.h"
 #include "Logging/LoggerManager.h"
-#include "System/Dispatcher.h"
+#include "LoggerAdapter.h"
 #include "CurrencyAdapter.h"
 #include "Settings.h"
-#include <QDebug>
+
+#ifndef AUTO_VAL_INIT
+#define AUTO_VAL_INIT(n) boost::value_initialized<decltype(n)>()
+#endif
 
 namespace WalletGui {
 
@@ -58,28 +69,13 @@ std::string convertPaymentId(const std::string& paymentIdString) {
 }
 
 std::string extractPaymentId(const std::string& extra) {
-  std::vector<CryptoNote::TransactionExtraField> extraFields;
-  std::vector<uint8_t> extraVector;
-  std::copy(extra.begin(), extra.end(), std::back_inserter(extraVector));
+  std::vector<uint8_t> extraVec;
+  extraVec.reserve(extra.size());
+  std::for_each(extra.begin(), extra.end(), [&extraVec](const char el) { extraVec.push_back(el); });
 
-  if (!CryptoNote::parseTransactionExtra(extraVector, extraFields)) {
-    throw std::runtime_error("Can't parse extra");
-  }
-
-  std::string result;
-  CryptoNote::TransactionExtraNonce extraNonce;
-  if (CryptoNote::findTransactionExtraFieldByType(extraFields, extraNonce)) {
-    Crypto::Hash paymentIdHash;
-    if (CryptoNote::getPaymentIdFromTransactionExtraNonce(extraNonce.nonce, paymentIdHash)) {
-      unsigned char* buff = reinterpret_cast<unsigned char *>(&paymentIdHash);
-      for (size_t i = 0; i < sizeof(paymentIdHash); ++i) {
-        result.push_back("0123456789ABCDEF"[buff[i] >> 4]);
-        result.push_back("0123456789ABCDEF"[buff[i] & 15]);
-      }
-    }
-  }
-
-  return result;
+  Crypto::Hash paymentId;
+  std::string res = (CryptoNote::getPaymentIdFromTxExtra(extraVec, paymentId) && paymentId != CryptoNote::NULL_HASH ? Common::podToHex(paymentId) : "");
+  return res;
 }
 
 inline std::string interpret_rpc_response(bool ok, const std::string& status) {
@@ -101,78 +97,31 @@ inline std::string interpret_rpc_response(bool ok, const std::string& status) {
 Node::~Node() {
 }
 
-class RpcNode : CryptoNote::INodeObserver, public Node {
+class RpcNode : public CryptoNote::INodeObserver, public CryptoNote::INodeRpcProxyObserver, public Node {
 public:
   Logging::LoggerManager& m_logManager;
-  RpcNode(const CryptoNote::Currency& currency, INodeCallback& callback, Logging::LoggerManager& logManager, const std::string& nodeHost, unsigned short nodePort) :
+  RpcNode(const CryptoNote::Currency& currency, INodeCallback& callback, Logging::LoggerManager& logManager,
+          const std::string& nodeHost, unsigned short nodePort, bool &enableSSL) :
     m_callback(callback),
     m_currency(currency),
     m_dispatcher(),
     m_logManager(logManager),
-    m_node(nodeHost, nodePort) {
-    m_node.addObserver(this);
+    m_logger(m_logManager, "RpcNode"),
+    m_node(nodeHost, nodePort, "/", enableSSL)
+  {
+    m_node.addObserver(dynamic_cast<INodeObserver*>(this));
+    m_node.addObserver(dynamic_cast<INodeRpcProxyObserver*>(this));
   }
 
   ~RpcNode() override {
   }
 
   void init(const std::function<void(std::error_code)>& callback) override {
+    m_logger(Logging::DEBUGGING) << "Initializing RpcNode...";
     m_node.init(callback);
   }
 
   void deinit() override {
-  }
-
-  uint64_t getSpeed() override {
-    // return zero - go look in daemon
-    return 0;
-  }
-
-  void startMining(const std::string& address, size_t threads_count) override {
-    CryptoNote::COMMAND_RPC_START_MINING::request req;
-    CryptoNote::COMMAND_RPC_START_MINING::response res;
-
-    req.miner_address = address;
-    req.threads_count = threads_count;
-
-    try {
-        //CryptoNote::HttpClient httpClient(m_dispatcher, "127.0.0.1", Settings::instance().getCurrentLocalDaemonPort());
-        CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-
-        CryptoNote::invokeJsonCommand(httpClient, "/start_mining", req, res);
-
-        std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          qDebug() << "Mining started in daemon";
-        else
-          qDebug() << "Mining has NOT been started: " << QString::fromStdString(err);
-
-      } catch (const CryptoNote::ConnectException&) {
-        qDebug() << "Wallet failed to connect to daemon.";
-      } catch (const std::exception& e) {
-        qDebug() << "Failed to invoke rpc method: " << e.what();
-      }
-  }
-
-  void stopMining() override {
-      CryptoNote::COMMAND_RPC_STOP_MINING::request req;
-      CryptoNote::COMMAND_RPC_STOP_MINING::response res;
-
-      try {
-         //CryptoNote::HttpClient httpClient(m_dispatcher, "127.0.0.1", Settings::instance().getCurrentLocalDaemonPort());
-         CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-
-          CryptoNote::invokeJsonCommand(httpClient, "/stop_mining", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-          if (err.empty())
-            qDebug() << "Mining stopped in daemon";
-          else
-            qDebug() << "Mining has NOT been stopped: " << QString::fromStdString(err);
-        } catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-        }
   }
 
   std::string convertPaymentId(const std::string& paymentIdString) override {
@@ -195,222 +144,124 @@ public:
     return m_node.getLastLocalBlockTimestamp();
   }
 
-  uint64_t getPeerCount() {
+  uint64_t getPeerCount() override {
     return m_node.getPeerCount();
   }
 
-  uint64_t getMinimalFee() {
+  uint64_t getMinimalFee() override {
     return m_node.getMinimalFee();
   }
 
-  uint64_t getDifficulty() {
-    try {
-        CryptoNote::COMMAND_RPC_GET_INFO::request req;
-        CryptoNote::COMMAND_RPC_GET_INFO::response res;
-        CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-        CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-        std::string err = interpret_rpc_response(true, res.status);
-      if (err.empty())
-        return res.difficulty;
-      else {
-        qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-        return 0;
-      }}
-        catch (const CryptoNote::ConnectException&) {
-        qDebug() << "Wallet failed to connect to daemon.";
-        return 0;
-      } catch (const std::exception& e) {
-        qDebug() << "Failed to invoke rpc method: " << e.what();
-        return 0;
-      }
+  std::string feeAddress() const override {
+    return m_node.feeAddress();
   }
 
-  uint64_t getTxCount() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.tx_count;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t feeAmount() const override {
+    return m_node.feeAmount();
   }
 
-  uint64_t getTxPoolSize() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.tx_pool_size;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t getDifficulty() override {
+    return m_node.getNextDifficulty();
   }
 
-  uint64_t getAltBlocksCount() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.alt_blocks_count;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t getTxCount() override {
+    return m_node.getTransactionsCount();
   }
 
-  uint64_t getConnectionsCount() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.outgoing_connections_count + res.incoming_connections_count;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t getTxPoolSize() override {
+    return m_node.getTransactionsPoolSize();
   }
 
-  uint64_t getOutgoingConnectionsCount() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.outgoing_connections_count;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t getAltBlocksCount() override {
+    return m_node.getAltBlocksCount();
   }
 
-  uint64_t getIncomingConnectionsCount() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.incoming_connections_count;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t getConnectionsCount() override {
+    return m_node.getOutConnectionsCount();
   }
 
-  uint64_t getWhitePeerlistSize() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.white_peerlist_size;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t getOutgoingConnectionsCount() override {
+    return m_node.getOutConnectionsCount();
   }
 
-  uint64_t getGreyPeerlistSize() {
-      try {
-          CryptoNote::COMMAND_RPC_GET_INFO::request req;
-          CryptoNote::COMMAND_RPC_GET_INFO::response res;
-          CryptoNote::HttpClient httpClient(m_dispatcher, m_node.m_nodeHost, m_node.m_nodePort);
-          CryptoNote::invokeJsonCommand(httpClient, "/getinfo", req, res);
-          std::string err = interpret_rpc_response(true, res.status);
-        if (err.empty())
-          return res.grey_peerlist_size;
-        else {
-          qDebug() << "Failed to invoke request: " << QString::fromStdString(err);
-          return 0;
-        }}
-          catch (const CryptoNote::ConnectException&) {
-          qDebug() << "Wallet failed to connect to daemon.";
-          return 0;
-        } catch (const std::exception& e) {
-          qDebug() << "Failed to invoke rpc method: " << e.what();
-          return 0;
-        }
+  uint64_t getIncomingConnectionsCount() override {
+    return m_node.getIncConnectionsCount();
   }
 
-  CryptoNote::BlockHeaderInfo getLastLocalBlockHeaderInfo() {
+  uint64_t getWhitePeerlistSize() override {
+    return m_node.getWhitePeerlistSize();
+  }
+
+  uint64_t getGreyPeerlistSize() override {
+    return m_node.getGreyPeerlistSize();
+  }
+
+  CryptoNote::BlockHeaderInfo getLastLocalBlockHeaderInfo() override {
     return m_node.getLastLocalBlockHeaderInfo();
   }
 
-  uint8_t getCurrentBlockMajorVersion() {
+  uint8_t getCurrentBlockMajorVersion() override {
     return getLastLocalBlockHeaderInfo().majorVersion;
+  }
+
+  uint64_t getNextReward() override {
+    return m_node.getNextReward();
+  }
+
+  bool getBlockTemplate(CryptoNote::Block& b, const CryptoNote::AccountKeys& acc, const CryptoNote::BinaryArray& ex_nonce, CryptoNote::difficulty_type& diffic, uint32_t& height) override {
+    // not implemented
+    return false;
+  }
+
+  bool handleBlockFound(CryptoNote::Block& b) override {
+    // not implemented
+    return false;
+  }
+  
+  bool getBlockLongHash(Crypto::cn_context &context, const CryptoNote::Block& block, Crypto::Hash& res) override {
+    // unsupported
+    return false;
+  }
+
+  uint64_t getAlreadyGeneratedCoins() override {
+    return m_node.getAlreadyGeneratedCoins();
+  }
+
+  std::vector<CryptoNote::p2pConnection> getConnections() override {
+    std::vector<CryptoNote::p2pConnection> connections;
+
+    auto getConnectionsCompleted = std::promise<std::error_code>();
+    auto getConnectionsWaitFuture = getConnectionsCompleted.get_future();
+
+    m_node.getConnections(std::ref(connections),
+      [&getConnectionsCompleted](std::error_code ec) {
+      auto detachedPromise = std::move(getConnectionsCompleted);
+      detachedPromise.set_value(ec);
+    });
+
+    std::error_code ec = getConnectionsWaitFuture.get();
+
+    if (ec) {
+     m_logger(Logging::INFO) << "Failed to get connections: " << ec << ", " << ec.message();
+    }
+
+    return connections;
+  }
+
+  NodeType getNodeType() const override {
+    return NodeType::RPC;
   }
 
   CryptoNote::IWalletLegacy* createWallet() override {
     return new CryptoNote::WalletLegacy(m_currency, m_node, m_logManager);
+  }
+
+  System::Dispatcher& getDispatcher() override {
+     return m_dispatcher;
+  }
+
+  CryptoNote::INode* getNode() override {
+    return &m_node;
   }
 
 private:
@@ -418,47 +269,68 @@ private:
   const CryptoNote::Currency& m_currency;
   CryptoNote::NodeRpcProxy m_node;
   System::Dispatcher m_dispatcher;
+  Logging::LoggerRef m_logger;
 
-  void peerCountUpdated(size_t count) {
+  void peerCountUpdated(size_t count) override {
     m_callback.peerCountUpdated(*this, count);
   }
 
-  void localBlockchainUpdated(uint64_t height) {
+  void localBlockchainUpdated(uint32_t height) override {
     m_callback.localBlockchainUpdated(*this, height);
   }
 
-  void lastKnownBlockHeightUpdated(uint64_t height) {
+  void lastKnownBlockHeightUpdated(uint32_t height) override {
     m_callback.lastKnownBlockHeightUpdated(*this, height);
+  }
+
+  void poolChanged() override {
+    m_callback.poolChanged(*this);
+  }
+
+  // INodeRpcProxyObserver
+  void connectionStatusUpdated(bool _connected) override {
+    m_callback.connectionStatusUpdated(_connected);
   }
 };
 
-class InprocessNode : CryptoNote::INodeObserver, public Node {
+class InprocessNode : public CryptoNote::INodeObserver, public Node {
 public:
   Logging::LoggerManager& m_logManager;
   InprocessNode(const CryptoNote::Currency& currency, Logging::LoggerManager& logManager, const CryptoNote::CoreConfig& coreConfig,
-    const CryptoNote::NetNodeConfig& netNodeConfig, INodeCallback& callback) :
+    const CryptoNote::NetNodeConfig& netNodeConfig, const CryptoNote::RpcServerConfig& rpcServerConfig, INodeCallback& callback) :
     m_currency(currency), m_dispatcher(),
     m_callback(callback),
     m_logManager(logManager),
+    m_logger(m_logManager, "InprocessNode"),
     m_coreConfig(coreConfig),
     m_netNodeConfig(netNodeConfig),
+    m_rpcServerConfig(rpcServerConfig),
+    m_rpcServer(nullptr),
     m_protocolHandler(currency, m_dispatcher, m_core, nullptr, logManager),
-    m_core(currency, &m_protocolHandler, logManager, true),
+    m_core(currency, &m_protocolHandler, logManager, m_dispatcher, true, false, false),
     m_nodeServer(m_dispatcher, m_protocolHandler, logManager),
-    m_node(m_core, m_protocolHandler) {
+    m_node(m_core, m_protocolHandler)
+  {
 
-      CryptoNote::Checkpoints checkpoints(logManager);
-      checkpoints.load_checkpoints_from_dns(Settings::instance().isTestnet());
-      for (const CryptoNote::CheckpointData& checkpoint : CryptoNote::CHECKPOINTS) {
-        checkpoints.add_checkpoint(checkpoint.height, checkpoint.blockId);
-      }
-      if (!Settings::instance().isTestnet()) {
+      if (Settings::instance().withoutCheckpoints()) {
+        m_logger(Logging::INFO) << "Loading without checkpoints";
+      } else if (Settings::instance().isTestnet()) {
+        m_logger(Logging::INFO) << "Running in Testnet mode";
+      } else {
+        bool allowReorg = Settings::instance().alowReorg();
+        if (allowReorg) {
+          m_logger(Logging::WARNING) << "Deep reorganization is allowed!";
+        }
+        CryptoNote::Checkpoints checkpoints(logManager, allowReorg);
+        checkpoints.load_checkpoints_from_dns();
+        for (const CryptoNote::CheckpointData& checkpoint : CryptoNote::CHECKPOINTS) {
+          checkpoints.add_checkpoint(checkpoint.height, checkpoint.blockId);
+        }
         m_core.set_checkpoints(std::move(checkpoints));
       }
 
       m_core.set_cryptonote_protocol(&m_protocolHandler);
       m_protocolHandler.set_p2p_endpoint(&m_nodeServer);
-
   }
 
   ~InprocessNode() override {
@@ -466,28 +338,46 @@ public:
   }
 
   void init(const std::function<void(std::error_code)>& callback) override {
+
+    m_logger(Logging::INFO) << "Initializing InprocessNode...";
+
     try {
       if (!m_core.init(m_coreConfig, CryptoNote::MinerConfig(), true)) {
         callback(make_error_code(CryptoNote::error::NOT_INITIALIZED));
         return;
       }
 
+      if(Settings::instance().getRollBack() != std::numeric_limits<uint32_t>::max()) {
+        m_core.rollbackBlockchain(Settings::instance().getRollBack());
+      }
+
       if (!m_nodeServer.init(m_netNodeConfig)) {
         callback(make_error_code(CryptoNote::error::NOT_INITIALIZED));
         return;
       }
+
+      if (Settings::instance().hasRunRpc()) {
+        m_logger(Logging::INFO) << "Starting core rpc server...";
+        m_rpcServer = new CryptoNote::RpcServer(m_rpcServerConfig, m_dispatcher, m_logManager, m_core, m_nodeServer, m_protocolHandler);
+        m_rpcServer->start();
+        m_logger(Logging::INFO) << "Core rpc server started ok";
+      }
+
     } catch (std::runtime_error& _err) {
       callback(make_error_code(CryptoNote::error::NOT_INITIALIZED));
       return;
     }
 
     m_node.init([this, callback](std::error_code ec) {
-      m_node.addObserver(this);
+      m_node.addObserver(dynamic_cast<INodeObserver*>(this));
       callback(ec);
     });
 
     m_nodeServer.run();
     m_nodeServer.deinit();
+    if (Settings::instance().hasRunRpc() && m_rpcServer != nullptr) {
+      m_rpcServer->stop();
+    }
     m_core.deinit();
     m_node.shutdown();
   }
@@ -496,18 +386,6 @@ public:
     m_nodeServer.sendStopSignal();
   }
 
-  void startMining(const std::string& address, size_t threads_count) override {
-    m_core.get_miner().start(CurrencyAdapter::instance().internalAddress(QString::fromStdString(address)), threads_count);
-  }
-
-  void stopMining() override {
-    m_core.get_miner().stop();
-  }
-
-  uint64_t getSpeed() override {
-    return m_core.get_miner().get_speed();
-  }
-
   std::string convertPaymentId(const std::string& paymentIdString) override {
     return WalletGui::convertPaymentId(paymentIdString);
   }
@@ -528,60 +406,121 @@ public:
     return m_node.getLastLocalBlockTimestamp();
   }
 
-  uint64_t getPeerCount() {
+  uint64_t getPeerCount() override {
     return m_nodeServer.get_connections_count();
   }
 
-  uint64_t getDifficulty() {
+  uint64_t getDifficulty() override {
     return m_core.getNextBlockDifficulty();
   }
 
-  uint64_t getTxCount() {
-    return m_core.get_blockchain_total_transactions() - m_core.get_current_blockchain_height();
+  uint64_t getTxCount() override {
+    return m_core.getBlockchainTotalTransactions() - m_core.getCurrentBlockchainHeight();
   }
 
-  uint64_t getTxPoolSize() {
-    return m_core.get_pool_transactions_count();
+  uint64_t getTxPoolSize() override {
+    return m_core.getPoolTransactionsCount();
   }
 
-  uint64_t getAltBlocksCount() {
-    return m_core.get_alternative_blocks_count();
+  uint64_t getAltBlocksCount() override {
+    return m_core.getAlternativeBlocksCount();
   }
 
-  uint64_t getConnectionsCount() {
+  uint64_t getConnectionsCount() override {
     return m_nodeServer.get_connections_count();
   }
 
-  uint64_t getOutgoingConnectionsCount() {
+  uint64_t getOutgoingConnectionsCount() override {
     return m_nodeServer.get_outgoing_connections_count();
   }
 
-  uint64_t getIncomingConnectionsCount() {
+  uint64_t getIncomingConnectionsCount() override {
     return m_nodeServer.get_connections_count() - m_nodeServer.get_outgoing_connections_count();
   }
 
-  uint64_t getWhitePeerlistSize() {
+  uint64_t getWhitePeerlistSize() override {
     return m_nodeServer.getPeerlistManager().get_white_peers_count();
   }
 
-  uint64_t getGreyPeerlistSize() {
+  uint64_t getGreyPeerlistSize() override {
     return m_nodeServer.getPeerlistManager().get_gray_peers_count();
   }
 
-  uint64_t getMinimalFee() {
+  uint64_t getMinimalFee() override {
     return m_core.getMinimalFee();
   }
 
-  CryptoNote::BlockHeaderInfo getLastLocalBlockHeaderInfo() {
+  std::string feeAddress() const override {
+    return m_node.feeAddress();
+  }
+
+  uint64_t feeAmount() const override {
+    return m_node.feeAmount();
+  }
+
+  CryptoNote::BlockHeaderInfo getLastLocalBlockHeaderInfo() override {
     return m_node.getLastLocalBlockHeaderInfo();
   }
 
-  uint8_t getCurrentBlockMajorVersion() {
+  uint8_t getCurrentBlockMajorVersion() override {
     return getLastLocalBlockHeaderInfo().majorVersion;
+  }
+
+  uint64_t getNextReward() override {
+    return m_node.getNextReward();
+  }
+
+  bool getBlockTemplate(CryptoNote::Block& b, const CryptoNote::AccountKeys& acc, const CryptoNote::BinaryArray& ex_nonce, CryptoNote::difficulty_type& diffic, uint32_t& height) override {
+    return m_core.get_block_template(b, acc, diffic, height, ex_nonce);
+  }
+
+  bool handleBlockFound(CryptoNote::Block& b) override {
+    return m_core.handle_block_found(b);
+  }
+  
+  bool getBlockLongHash(Crypto::cn_context &context, const CryptoNote::Block& block, Crypto::Hash& res) override {
+    return m_core.getBlockLongHash(context, block, res);
+  }
+
+  uint64_t getAlreadyGeneratedCoins() override {
+    return m_node.getAlreadyGeneratedCoins();
+  }
+
+  std::vector<CryptoNote::p2pConnection> getConnections() override {
+    std::vector<CryptoNote::p2pConnection> connections;
+
+    auto getConnectionsCompleted = std::promise<std::error_code>();
+    auto getConnectionsWaitFuture = getConnectionsCompleted.get_future();
+
+    m_node.getConnections(std::ref(connections),
+      [&getConnectionsCompleted](std::error_code ec) {
+      auto detachedPromise = std::move(getConnectionsCompleted);
+      detachedPromise.set_value(ec);
+    });
+
+    std::error_code ec = getConnectionsWaitFuture.get();
+
+    if (ec) {
+      m_logger(Logging::INFO) << "Failed to get connections: " << ec << ", " << ec.message();
+    }
+
+    return connections;
+  }
+
+  NodeType getNodeType() const override {
+    return NodeType::IN_PROCESS;
   }
 
   CryptoNote::IWalletLegacy* createWallet() override {
     return new CryptoNote::WalletLegacy(m_currency, m_node, m_logManager);
+  }
+
+  System::Dispatcher& getDispatcher() override {
+     return m_dispatcher;
+  }
+
+  CryptoNote::INode* getNode() override {
+    return &m_node;
   }
 
 private:
@@ -590,33 +529,44 @@ private:
   System::Dispatcher m_dispatcher;
   CryptoNote::CoreConfig m_coreConfig;
   CryptoNote::NetNodeConfig m_netNodeConfig;
-  CryptoNote::core m_core;
+  CryptoNote::RpcServerConfig m_rpcServerConfig;
+  CryptoNote::Core m_core;
   CryptoNote::CryptoNoteProtocolHandler m_protocolHandler;
   CryptoNote::NodeServer m_nodeServer;
   CryptoNote::InProcessNode m_node;
   std::future<bool> m_nodeServerFuture;
+  Logging::LoggerRef m_logger;
+  CryptoNote::RpcServer* m_rpcServer;
 
-  void peerCountUpdated(size_t count) {
-    //m_callback.peerCountUpdated(*this, count);
-    m_callback.peerCountUpdated(*this, m_nodeServer.get_connections_count() - 1);
+  void peerCountUpdated(size_t count) override {
+    m_callback.peerCountUpdated(*this, count);
   }
 
-  void localBlockchainUpdated(uint64_t height) {
+  void localBlockchainUpdated(uint32_t height) override {
     m_callback.localBlockchainUpdated(*this, height);
   }
 
-  void lastKnownBlockHeightUpdated(uint64_t height) {
+  void lastKnownBlockHeightUpdated(uint32_t height) override {
     m_callback.lastKnownBlockHeightUpdated(*this, height);
+  }
+
+  void poolChanged() override {
+    m_callback.poolChanged(*this);
+  }
+
+  // dummy, used only for INodeRpcProxyObserver
+  void connectionStatusUpdated(bool _connected) {
+    m_callback.connectionStatusUpdated(_connected);
   }
 };
 
-Node* createRpcNode(const CryptoNote::Currency& currency, INodeCallback& callback, Logging::LoggerManager& logManager,  const std::string& nodeHost, unsigned short nodePort) {
-  return new RpcNode(currency, callback, logManager, nodeHost, nodePort);
+Node* createRpcNode(const CryptoNote::Currency& currency, INodeCallback& callback, Logging::LoggerManager& logManager,  const std::string& nodeHost, unsigned short nodePort, bool enableSSL) {
+  return new RpcNode(currency, callback, logManager, nodeHost, nodePort, enableSSL);
 }
 
 Node* createInprocessNode(const CryptoNote::Currency& currency, Logging::LoggerManager& logManager,
-  const CryptoNote::CoreConfig& coreConfig, const CryptoNote::NetNodeConfig& netNodeConfig, INodeCallback& callback) {
-  return new InprocessNode(currency, logManager, coreConfig, netNodeConfig, callback);
+  const CryptoNote::CoreConfig& coreConfig, const CryptoNote::NetNodeConfig& netNodeConfig, const CryptoNote::RpcServerConfig& rpcServerConfig, INodeCallback& callback) {
+  return new InprocessNode(currency, logManager, coreConfig, netNodeConfig, rpcServerConfig, callback);
 }
 
 }

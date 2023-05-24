@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 2.8.6)
-if (WIN32)
+cmake_minimum_required(VERSION 3.8)
+if(WIN32)
  option(CMAKE_USE_WIN32_THREADS_INIT "using WIN32 threads" ON)
 endif()
 set(VERSION "0.1")
@@ -10,6 +10,14 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 string(TOLOWER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_LOWER)
 
+# Required for finding Threads on ARM
+enable_language(C)
+enable_language(CXX)
+
+# Enable c++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 # ARCH defines the target architecture, either by an explicit identifier or
 # one of the following two keywords. By default, ARCH a value of 'native':
 # target arch = host arch, binary is not portable. When ARCH is set to the
@@ -18,25 +26,27 @@ string(TOLOWER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_LOWER)
 # when ARCH is not set to an explicit identifier, cmake's builtin is used
 # to identify the target architecture, to direct logic in this cmake script.
 # Since ARCH is a cached variable, it will not be set on first cmake invocation.
-if (NOT ARCH OR ARCH STREQUAL "" OR ARCH STREQUAL "native" OR ARCH STREQUAL "default")
+if(NOT ARCH OR ARCH STREQUAL "" OR ARCH STREQUAL "native" OR ARCH STREQUAL "default")
   set(ARCH_ID "${CMAKE_SYSTEM_PROCESSOR}")
 else()
   set(ARCH_ID "${ARCH}")
 endif()
 string(TOLOWER "${ARCH_ID}" ARM_ID)
-string(SUBSTRING "${ARM_ID}" 0 3 ARM_TEST)
-if (ARM_TEST STREQUAL "arm")
+if(ARM_ID)
+  string(SUBSTRING "${ARM_ID}" 0 3 ARM_TEST)
+endif()
+if(ARM_TEST STREQUAL "arm")
   set(ARM 1)
   string(SUBSTRING "${ARM_ID}" 0 5 ARM_TEST)
-  if (ARM_TEST STREQUAL "armv6")
+  if(ARM_TEST STREQUAL "armv6")
     set(ARM6 1)
   endif()
-  if (ARM_TEST STREQUAL "armv7")
+  if(ARM_TEST STREQUAL "armv7")
     set(ARM7 1)
   endif()
 endif()
 
-if (ARM_ID STREQUAL "aarch64" OR ARM_ID STREQUAL "arm64" OR ARM_ID STREQUAL "armv8-a")
+if(ARM_ID STREQUAL "aarch64" OR ARM_ID STREQUAL "arm64" OR ARM_ID STREQUAL "armv8-a")
   set(ARM 1)
   set(ARM8 1)
   set(ARCH "armv8-a")
@@ -66,20 +76,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG ${OPT_FLAGS_RELEASE}")
 list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_SOURCE_DIR}/cmake")
 
-if (NOT DEFINED ENV{DEVELOPER_LOCAL_TOOLS})
-  message(STATUS "Could not find DEVELOPER_LOCAL_TOOLS in env (not required)")
-  set(BOOST_IGNORE_SYSTEM_PATHS_DEFAULT OFF)
-elseif ("$ENV{DEVELOPER_LOCAL_TOOLS}" EQUAL 1)
-  message(STATUS "Found: env DEVELOPER_LOCAL_TOOLS = 1")
-  set(BOOST_IGNORE_SYSTEM_PATHS_DEFAULT ON)
-else()
-  message(STATUS "Found: env DEVELOPER_LOCAL_TOOLS = 0")
-  set(BOOST_IGNORE_SYSTEM_PATHS_DEFAULT OFF)
-endif()
-
-message(STATUS "BOOST_IGNORE_SYSTEM_PATHS defaults to ${BOOST_IGNORE_SYSTEM_PATHS_DEFAULT}")
-option(BOOST_IGNORE_SYSTEM_PATHS "Ignore boost system paths for local boost installation" ${BOOST_IGNORE_SYSTEM_PATHS_DEFAULT})
-
 option(WITH_LITE_WALLET "Lite wallet specific" OFF)
 
 if(WITH_LITE_WALLET)
@@ -92,7 +88,7 @@ set(CMAKE_CONFIGURATION_TYPES Debug RelWithDebInfo Release CACHE TYPE INTERNAL)
 set(CMAKE_SKIP_INSTALL_RULES ON)
 set(CMAKE_SKIP_PACKAGE_ALL_DEPENDENCY ON)
 set(CMAKE_SUPPRESS_REGENERATION ON)
-# enable_testing()
+
 # copy CTestCustom.cmake to build dir to disable long running tests in 'make test'
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/CTestCustom.cmake ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -131,16 +127,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "kOpenBSD.*|OpenBSD.*")
   set(OPENBSD TRUE)
 endif()
 
-# TODO: check bsdi, NetBSD, to see if they need the same FreeBSD changes
-#
-# elseif(CMAKE_SYSTEM_NAME MATCHES "kNetBSD.*|NetBSD.*")
-#   set(NETBSD TRUE)
-# elseif(CMAKE_SYSTEM_NAME MATCHES ".*BSDI.*")
-#   set(BSDI TRUE)
-
-#include_directories(include src contrib/epee/include external "${CMAKE_BINARY_DIR}/version")
-
-if(APPLE)
+if(APPLE OR FREEBSD)
   include_directories(SYSTEM /usr/include/malloc)
   if(POLICY CMP0042)
     cmake_policy(SET CMP0042 NEW)
@@ -154,10 +141,13 @@ else()
   set(DEFAULT_STATIC false)
 endif()
 
-if(MSVC)
+if(MSVC OR MINGW)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/Platform/Windows)
 elseif(APPLE)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/Platform/OSX)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/Platform/Posix)
+elseif(FREEBSD)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/Platform/FreeBSD)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/Platform/Posix)
 elseif(ANDROID)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/Platform/Android)
@@ -169,13 +159,16 @@ endif()
 
 option(STATIC "Link libraries statically" ${DEFAULT_STATIC})
 set(STATIC ${MSVC} CACHE BOOL "Link libraries statically")
-
-# This is a CMake built-in switch that concerns internal libraries
-if (NOT DEFINED BUILD_SHARED_LIBS AND NOT STATIC AND CMAKE_BUILD_TYPE_LOWER STREQUAL "debug")
-    set(BUILD_SHARED_LIBS ON)
+if(MINGW AND STATIC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++ -static-libgcc")
 endif()
 
-if (BUILD_SHARED_LIBS)
+# This is a CMake built-in switch that concerns internal libraries
+if(NOT DEFINED BUILD_SHARED_LIBS AND NOT STATIC AND CMAKE_BUILD_TYPE_LOWER STREQUAL "debug")
+  set(BUILD_SHARED_LIBS ON)
+endif()
+
+if(BUILD_SHARED_LIBS)
   message(STATUS "Building internal libraries with position independent code")
   set(PIC_FLAG "-fPIC")
   add_definitions("-DBUILD_SHARED_LIBS")
@@ -204,7 +197,7 @@ if(STATIC)
   endif()
 endif()
 
-if (UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE)
   # Note that at the time of this writing the -Wstrict-prototypes flag added below will make this fail
   set(THREADS_PREFER_PTHREAD_FLAG ON)
   find_package(Threads)
@@ -215,25 +208,29 @@ add_subdirectory(external)
 # Final setup for miniupnpc
 if(STATIC OR IOS)
  #if(UPNP_STATIC OR IOS)
-  add_definitions("-DUPNP_STATIC")
+  add_definitions("-DUPNP_STATIC -DMINIUPNP_STATICLIB -DUPNPC_BUILD_STATIC")
  else()
   add_definitions("-DUPNP_DYNAMIC")
   include_directories(${UPNP_INCLUDE})
  endif()
 
 if(MSVC)
-  add_definitions("/bigobj /MP /W3 /GS- /D_CRT_SECURE_NO_WARNINGS /wd4996 /wd4345 /D_WIN32_WINNT=0x0600 /DWIN32_LEAN_AND_MEAN /DGTEST_HAS_TR1_TUPLE=0 /D_VARIADIC_MAX=8 /D__SSE4_1__")
-  #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Dinline=__inline")
+  set (CMAKE_MSVC_FLAGS_BASE "/D_CRT_SECURE_NO_WARNINGS /wd4996 /wd4345 /D_WIN32_WINNT=0x0600 /DWIN32_LEAN_AND_MEAN /DGTEST_HAS_TR1_TUPLE=0 /D_VARIADIC_MAX=8 /D__SSE4_1__ /D_NO_CRT_STDIO_INLINE")
+  set (CMAKE_MSVC_FLAGS_EXT "/bigobj /MP /W3 /GS-")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_MSVC_FLAGS_BASE} ${CMAKE_MSVC_FLAGS_EXT}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_MSVC_FLAGS_BASE} ${CMAKE_MSVC_FLAGS_EXT}")
+  set(CMAKE_RC_FLAGS ${CMAKE_MSVC_FLAGS_BASE})
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:10485760")
-  if(STATIC)    
-	foreach(VAR CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_C_FLAGS_RELEASE CMAKE_CXX_FLAGS_RELEASE)
+  if(STATIC)
+    foreach(VAR CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_C_FLAGS_RELEASE CMAKE_CXX_FLAGS_RELEASE)
       string(REPLACE "/MD" "/MT" ${VAR} "${${VAR}}")
+      set(${VAR} "/MT")
     endforeach()
   endif()
   include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/msc)
 else()
   include(TestCXXAcceptsFlag)
-  set(ARCH native CACHE STRING "CPU to build for: -march value or default to not pass -march at all")
+  set(ARCH default CACHE STRING "CPU to build for: -march value or default to not pass -march at all")
   message(STATUS "Building on ${CMAKE_SYSTEM_PROCESSOR} for ${ARCH}")
   if("${ARCH}" STREQUAL "default")
     set(ARCH_FLAG "")
@@ -242,18 +239,18 @@ else()
   else()
     set(ARCH_FLAG "-march=${ARCH}")
   endif()
+
   set(WARNINGS "-Wall -Wextra -Wpointer-arith -Wundef -Wvla -Wwrite-strings -Wno-error=extra -Wno-error=unused-function -Wno-error=deprecated-declarations -Wno-error=sign-compare -Wno-error=strict-aliasing -Wno-error=type-limits -Wno-unused-parameter -Wno-error=unused-variable -Wno-error=undef -Wno-error=uninitialized -Wno-error=unused-result")
+  
   if(NOT MINGW)
     set(WARNINGS_AS_ERRORS_FLAG "-Werror")
   endif()
   if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    # maybe remove
     set(WARNINGS "${WARNINGS} -Wno-error=mismatched-tags -Wno-error=null-conversion -Wno-overloaded-shift-op-parentheses -Wno-error=shift-count-overflow -Wno-error=tautological-constant-out-of-range-compare -Wno-error=unused-private-field -Wno-error=unneeded-internal-declaration -Wno-error=unused-function")
-	if(NOT APPLE) 
-		set(WARNINGS "${WARNINGS} -Wno-unused-lambda-capture")
-	endif()
-	# this ^
-	if(ARM)
+      if(ANDROID)
+        set(WARNINGS "${WARNINGS} -Wno-unused-lambda-capture")
+      endif()
+      if(ARM)
       set(WARNINGS "${WARNINGS} -Wno-error=inline-asm")
     endif()
   else()
@@ -282,7 +279,7 @@ else()
     set(STATIC_ASSERT_FLAG "-Dstatic_assert=_Static_assert")
   endif()
   
-  try_compile(STATIC_ASSERT_CPP_RES "${CMAKE_CURRENT_BINARY_DIR}/static-assert" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/test-static-assert.cpp" COMPILE_DEFINITIONS "-std=c++11")
+  try_compile(STATIC_ASSERT_CPP_RES "${CMAKE_CURRENT_BINARY_DIR}/static-assert" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/test-static-assert.cpp" COMPILE_DEFINITIONS "-std=c++17")
   if(STATIC_ASSERT_CPP_RES)
     set(STATIC_ASSERT_CPP_FLAG "")
   else()
@@ -319,7 +316,7 @@ else()
   endif()
   
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -D_GNU_SOURCE ${MINGW_FLAG} ${STATIC_ASSERT_FLAG} ${WARNINGS} ${C_WARNINGS} ${ARCH_FLAG} ${PIC_FLAG}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -D_GNU_SOURCE ${MINGW_FLAG} ${STATIC_ASSERT_CPP_FLAG} ${WARNINGS} ${CXX_WARNINGS} ${ARCH_FLAG} ${PIC_FLAG}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -D_GNU_SOURCE ${MINGW_FLAG} ${STATIC_ASSERT_CPP_FLAG} ${WARNINGS} ${CXX_WARNINGS} ${ARCH_FLAG} ${PIC_FLAG}")
 
   # With GCC 6.1.1 the compiled binary malfunctions due to aliasing. Until that
   # is fixed in the code (Issue #847), force compiler to be conservative.
@@ -419,6 +416,7 @@ else()
 
   if(APPLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_HAS_TR1_TUPLE=0")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_CXX_FLAGS} -lpthread")
   endif()
   
   set(DEBUG_FLAGS "-g3")
@@ -447,7 +445,7 @@ else()
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9.0) AND NOT OPENBSD AND NOT DRAGONFLY)
       # When invoking cmake on distributions on which gcc's binaries are prefixed
       # with an arch-specific triplet, the user must specify -DCHOST=<prefix>
-      if (DEFINED CHOST)
+      if(DEFINED CHOST)
         set(CMAKE_AR "${CHOST}-gcc-ar")
         set(CMAKE_RANLIB "${CHOST}-gcc-ranlib")
       else()
@@ -465,11 +463,11 @@ else()
   if(STATIC)
     # STATIC already configures most deps to be linked in statically,
     # here we make more deps static if the platform permits it
-    if (MINGW)
+    if(MINGW)
       # On Windows, this is as close to fully-static as we get:
       # this leaves only deps on /c/Windows/system32/*.dll
       set(STATIC_FLAGS "-static")
-    elseif (NOT (APPLE OR FREEBSD OR OPENBSD OR DRAGONFLY))
+    elseif(NOT (APPLE OR FREEBSD OR OPENBSD OR DRAGONFLY))
       # On Linux, we don't support fully static build, but these can be static
       set(STATIC_FLAGS "-static-libgcc -static-libstdc++")
     endif()
@@ -478,25 +476,22 @@ else()
 endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux" AND NOT ANDROID)
-    set(CMAKE_EXE_LINKER_FLAGS "-pthread")
-	set(Boost_USE_STATIC_LIBS ON)
-    set(Boost_USE_STATIC_RUNTIME ON)
-endif()
-
-if (${BOOST_IGNORE_SYSTEM_PATHS} STREQUAL "ON")
-  set(Boost_NO_SYSTEM_PATHS TRUE)
+  set(CMAKE_EXE_LINKER_FLAGS "-pthread")
 endif()
 
 set(OLD_LIB_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
-if(STATIC)
-  if(MINGW)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
-  endif()
+if(STATIC AND MINGW)
+  set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+endif() 
 
-  set(Boost_USE_STATIC_LIBS ON)
-  set(Boost_USE_STATIC_RUNTIME ON)
-endif()
-find_package(Boost 1.55 QUIET REQUIRED COMPONENTS system filesystem thread date_time chrono regex serialization program_options coroutine context atomic)
+# Link static BOOST libraries everywhere
+set(Boost_NO_BOOST_CMAKE ON)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
+
+find_package(Boost REQUIRED COMPONENTS system filesystem thread date_time chrono regex serialization program_options coroutine context atomic)
+message(STATUS "Boost Found: ${Boost_INCLUDE_DIRS}")
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 set(CMAKE_FIND_LIBRARY_SUFFIXES ${OLD_LIB_SUFFIXES})
 if(NOT Boost_FOUND)
@@ -504,18 +499,63 @@ if(NOT Boost_FOUND)
 elseif(Boost_FOUND)
   message(STATUS "Found Boost Version: ${Boost_VERSION}")
 endif()
+# Force find_package(OpenSSL) to search the static library
+if(STATIC)
+  set (OPENSSL_USE_STATIC_LIBS ON)
+endif()
+if(MSVC)
+  set(OPENSSL_MSVC_STATIC_RT ON)
+endif()
+
+# We have to look for Homebrew OpenSSL a bit differently
+# Borrowed from https://github.com/tarantool/tarantool/commit/6eab201af1843f53a833c8928dc58fceffa08147
+if(APPLE)
+  find_program(HOMEBREW_EXECUTABLE brew)
+  execute_process(COMMAND ${HOMEBREW_EXECUTABLE} --prefix openssl
+    OUTPUT_VARIABLE HOMEBREW_OPENSSL
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(DEFINED HOMEBREW_OPENSSL)
+    if(NOT DEFINED OPENSSL_ROOT_DIR)
+      message(STATUS "Setting OpenSSL root to ${HOMEBREW_OPENSSL}")
+      set(OPENSSL_ROOT_DIR "${HOMEBREW_OPENSSL}")
+    endif()
+  endif()
+endif()
+
+find_package(OpenSSL)
+
+if(NOT OPENSSL_FOUND)
+    find_package(PkgConfig)
+
+    if(PKG_CONFIG_FOUND)
+        pkg_search_module(OPENSSL openssl)
+    endif()
+endif()
+
+if(OPENSSL_FOUND)
+  ## On non MSVC build systems, we need to link ldl with the static OpenSSL library
+  if(NOT MSVC AND NOT MINGW)
+    set(OPENSSL_LIBRARIES "${OPENSSL_LIBRARIES};dl")
+  endif()
+
+  include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
+  add_definitions(-DCPPHTTPLIB_OPENSSL_SUPPORT)
+  message(STATUS "OpenSSL Found: ${OPENSSL_INCLUDE_DIR}")
+  message(STATUS "OpenSSL Libraries: ${OPENSSL_LIBRARIES}")
+else()
+  message(STATUS "OpenSSL Found: No... Skipping...")
+endif()
 
 if(MINGW)
-  set(Boost_LIBRARIES "${Boost_LIBRARIES};ws2_32;mswsock;iphlpapi")
+  set(Boost_LIBRARIES "${Boost_LIBRARIES};ws2_32;mswsock;iphlpapi;bcrypt")
 elseif(APPLE OR OPENBSD OR ANDROID)
   set(Boost_LIBRARIES "${Boost_LIBRARIES}")
 elseif(NOT MSVC)
   set(Boost_LIBRARIES "${Boost_LIBRARIES};rt")
 endif()
 
-include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 if(MINGW)
-  set(EXTRA_LIBRARIES mswsock;ws2_32;iphlpapi)
+  set(EXTRA_LIBRARIES mswsock;ws2_32;iphlpapi;bcrypt)
 elseif(APPLE OR OPENBSD OR ANDROID)
   set(EXTRA_LIBRARIES "")
 elseif(FREEBSD)
@@ -526,6 +566,10 @@ elseif(DRAGONFLY)
 elseif(NOT MSVC)
   find_library(RT rt)
   set(EXTRA_LIBRARIES ${RT})
+endif()
+
+if(MINGW AND STATIC)
+  set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive")
 endif()
 
 list(APPEND EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
@@ -551,6 +595,7 @@ function (treat_warnings_as_errors dirs)
 endfunction()
 
 add_subdirectory(src)
+add_subdirectory(include)
 
 treat_warnings_as_errors(src)
 
@@ -558,13 +603,12 @@ option(BUILD_TESTS "Build tests." OFF)
 
 if(BUILD_TESTS)
   add_subdirectory(tests)
+  enable_testing()
 endif()
-
-
 
 set(COMMIT_ID_IN_VERSION ON CACHE BOOL "Include commit ID in version")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/version")
-if (NOT COMMIT_ID_IN_VERSION)
+if(NOT COMMIT_ID_IN_VERSION)
   set(VERSION "${VERSION}-unknown")
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version/version.h")
   add_custom_target(version ALL)
@@ -579,7 +623,12 @@ else()
   find_package(Git QUIET)
   if(Git_FOUND OR GIT_FOUND)
     message(STATUS "Found Git: ${GIT_EXECUTABLE}")
-    add_custom_target(version ALL "${CMAKE_COMMAND}" "-D" "VERSION=${VERSION}" "-D" "GIT=${GIT_EXECUTABLE}" "-D" "TO=${CMAKE_CURRENT_BINARY_DIR}/version/version.h" "-P" "${CMAKE_CURRENT_SOURCE_DIR}/src/version.cmake" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_custom_target(version ALL "${CMAKE_COMMAND}"
+                      "-D" "VERSION=${VERSION}"
+                      "-D" "GIT=${GIT_EXECUTABLE}"
+                      "-D" "TO=${CMAKE_CURRENT_BINARY_DIR}/version/version.h"
+                      "-D" "BUILD_REMARK=${BUILD_REMARK}"
+                      "-P" "${CMAKE_CURRENT_SOURCE_DIR}/src/version.cmake" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
   else()
     message(STATUS "WARNING: Git was not found!")
     set(VERSION "${VERSION}-unknown")

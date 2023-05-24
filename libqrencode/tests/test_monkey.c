@@ -15,7 +15,7 @@ static const char *AN = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 
 #define drand(__scale__) ((__scale__) * (double)rand() / ((double)RAND_MAX + 1.0))
 
-int fill8bitString(void)
+static int fill8bitString(void)
 {
 	int len, i;
 
@@ -28,7 +28,7 @@ int fill8bitString(void)
 	return len;
 }
 
-int fill8bitData(void)
+static int fill8bitData(void)
 {
 	int len, i;
 
@@ -41,7 +41,7 @@ int fill8bitData(void)
 	return len;
 }
 
-int fillANData(void)
+static int fillANData(void)
 {
 	int len, i;
 
@@ -54,7 +54,7 @@ int fillANData(void)
 	return len;
 }
 
-void test_encode_an(int num)
+static void test_encode_an(int num)
 {
 	int ret;
 	int len;
@@ -84,7 +84,9 @@ void test_encode_an(int num)
 	ret = memcmp(qrdata->data, data, len);
 	if(ret != 0) {
 		unsigned char *frame, *p;
-		int x,y, c;
+		unsigned int x;
+		int y,c;
+		int dataLength, eccLength;
 		QRinput *input;
 		QRcode *origcode;
 		BitStream *bstream;
@@ -140,7 +142,8 @@ void test_encode_an(int num)
 
 		snprintf(buf, 256, "monkey-orig-bits-%d.dat", num);
 		fp = fopen(buf, "w");
-		bstream = QRinput_mergeBitStream(input);
+		bstream = BitStream_new();
+		QRinput_mergeBitStream(input, bstream);
 		c = 0;
 		for(x=0; x<bstream->length; x++) {
 			fputc((bstream->data[x]&1)?'1':'0', fp);
@@ -158,7 +161,9 @@ void test_encode_an(int num)
 
 		snprintf(buf, 256, "monkey-result-bits-%d.dat", num);
 		fp = fopen(buf, "w");
-		p = QRcode_extractBits(qrcode, &y);
+		bstream = QRcode_extractBits(qrcode, &dataLength, &eccLength);
+		y = bstream->length;
+		p = bstream->data;
 		c = 0;
 		for(x=0; x<y; x++) {
 			fputc((p[x]&1)?'1':'0', fp);
@@ -171,25 +176,26 @@ void test_encode_an(int num)
 			}
 		}
 		fclose(fp);
-		free(p);
+		BitStream_free(bstream);
 	}
 	QRdata_free(qrdata);
 	QRcode_free(qrcode);
 }
 
-void monkey_encode_an(int loop)
+static void monkey_encode_an(int loop)
 {
 	int i;
 
-	puts("Monkey test: QRcode_encodeString() - AlphaNumeric string.");
+	testStart("Monkey test: QRcode_encodeString() - AlphaNumeric string.");
 	srand(0);
 	for(i=0; i<loop; i++) {
 		test_encode_an(i);
 	}
+	testEnd(0);
 }
 
 
-void test_split_an(int num)
+static void test_split_an(int num)
 {
 	QRinput *input;
 	QRinput_List *list;
@@ -240,18 +246,19 @@ void test_split_an(int num)
 	QRinput_free(input);
 }
 
-void monkey_split_an(int loop)
+static void monkey_split_an(int loop)
 {
 	int i;
 
-	puts("Monkey test: Split_splitStringToQRinput() - AlphaNumeric string.");
+	testStart("Monkey test: Split_splitStringToQRinput() - AlphaNumeric string.");
 	srand(0);
 	for(i=0; i<loop; i++) {
 		test_split_an(i);
 	}
+	testEnd(0);
 }
 
-void test_encode_8(int num)
+static void test_encode_8(int num)
 {
 	QRcode *qrcode;
 	QRdata *qrdata;
@@ -282,18 +289,19 @@ void test_encode_8(int num)
 	QRcode_free(qrcode);
 }
 
-void monkey_encode_8(int loop)
+static void monkey_encode_8(int loop)
 {
 	int i;
 
-	puts("Monkey test: QRcode_encodeData() - 8bit char string.");
+	testStart("Monkey test: QRcode_encodeData() - 8bit char string.");
 	srand(0);
 	for(i=0; i<loop; i++) {
 		test_encode_8(i);
 	}
+	testEnd(0);
 }
 
-void test_split_8(int num)
+static void test_split_8(int num)
 {
 	QRinput *input;
 	QRinput_List *list;
@@ -344,18 +352,19 @@ void test_split_8(int num)
 	QRinput_free(input);
 }
 
-void monkey_split_8(int loop)
+static void monkey_split_8(int loop)
 {
 	int i;
 
-	puts("Monkey test: Split_splitStringToQRinput() - 8bit char string.");
+	testStart("Monkey test: Split_splitStringToQRinput() - 8bit char string.");
 	srand(0);
 	for(i=0; i<loop; i++) {
 		test_split_8(i);
 	}
+	testEnd(0);
 }
 
-void test_encode_kanji(int num)
+static void test_encode_kanji(int num)
 {
 	QRcode *qrcode;
 	QRdata *qrdata;
@@ -386,18 +395,19 @@ void test_encode_kanji(int num)
 	QRcode_free(qrcode);
 }
 
-void monkey_encode_kanji(int loop)
+static void monkey_encode_kanji(int loop)
 {
 	int i;
 
-	puts("Monkey test: QRcode_encodeString() - kanji string.");
+	testStart("Monkey test: QRcode_encodeString() - kanji string.");
 	srand(0);
 	for(i=0; i<loop; i++) {
 		test_encode_kanji(i);
 	}
+	testEnd(0);
 }
 
-void test_split_kanji(int num)
+static void test_split_kanji(int num)
 {
 	QRinput *input;
 	QRinput_List *list;
@@ -448,18 +458,19 @@ void test_split_kanji(int num)
 	QRinput_free(input);
 }
 
-void monkey_split_kanji(int loop)
+static void monkey_split_kanji(int loop)
 {
 	int i;
 
-	puts("Monkey test: Split_splitStringToQRinput() - kanji string.");
+	testStart("Monkey test: Split_splitStringToQRinput() - kanji string.");
 	srand(0);
 	for(i=0; i<loop; i++) {
 		test_split_kanji(i);
 	}
+	testEnd(0);
 }
 
-void test_split_structure(int num)
+static void test_split_structure(int num)
 {
 	QRinput *input;
 	QRinput_Struct *s;
@@ -534,17 +545,20 @@ void test_split_structure(int num)
 	QRinput_free(input);
 	QRinput_Struct_free(s);
 	QRcode_List_free(codes);
+
+	return;
 }
 
-void monkey_split_structure(int loop)
+static void monkey_split_structure(int loop)
 {
 	int i;
 
-	puts("Monkey test: QRinput_splitQRinputToStruct.");
+	testStart("Monkey test: QRinput_splitQRinputToStruct.");
 	srand(0);
 	for(i=0; i<loop; i++) {
 		test_split_structure(i);
 	}
+	testEnd(0);
 }
 
 int main(int argc, char **argv)
@@ -553,6 +567,8 @@ int main(int argc, char **argv)
 	if(argc == 2) {
 		loop = atoi(argv[1]);
 	}
+	int tests = 7;
+	testInit(tests);
 	monkey_split_an(loop);
 	monkey_encode_an(loop);
 	monkey_split_8(loop);
@@ -560,8 +576,7 @@ int main(int argc, char **argv)
 	monkey_split_kanji(loop);
 	monkey_encode_kanji(loop);
 	monkey_split_structure(loop);
-
-	QRcode_clearCache();
+	testReport(tests);
 
 	return 0;
 }

@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "WalletService.h"
 
@@ -34,11 +34,11 @@
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/CryptoNoteBasicImpl.h"
 #include "CryptoNoteCore/TransactionExtra.h"
+#include "CryptoNoteCore/Account.h"
 
 #include <System/EventLock.h>
 
 #include "PaymentServiceJsonRpcMessages.h"
-#include "NodeFactory.h"
 
 #include "Wallet/WalletGreen.h"
 #include "Wallet/LegacyKeysImporter.h"
@@ -46,6 +46,8 @@
 #include "Wallet/WalletUtils.h"
 #include "WalletServiceErrorCategory.h"
 #include "ITransfersContainer.h"
+
+#include "Mnemonics/electrum-words.cpp"
 
 using namespace CryptoNote;
 
@@ -268,14 +270,14 @@ std::vector<PaymentService::TransactionHashesInBlockRpcInfo> convertTransactions
 }
 
 void validateMixin(const uint16_t& mixin, const CryptoNote::Currency& currency, Logging::LoggerRef logger) {
-    /*if (mixin < currency.minMixin() && mixin != 0) {
-        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Mixin must be equal or bigger to" << currency.minMixin();
+    if (mixin < currency.minMixin() && mixin != 0) {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Mixin must be equal to or bigger than " << currency.minMixin();
         throw std::system_error(make_error_code(CryptoNote::error::MIXIN_COUNT_TOO_SMALL));
     }
     if (mixin > currency.maxMixin()) {
-        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Mixin must be equal or smaller than" << currency.maxMixin();
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Mixin must be equal to or smaller than " << currency.maxMixin();
         throw std::system_error(make_error_code(CryptoNote::error::MIXIN_COUNT_TOO_LARGE));
-    }*/
+    }
 }
 
 void validateAddresses(const std::vector<std::string>& addresses, const CryptoNote::Currency& currency, Logging::LoggerRef logger) {
@@ -320,24 +322,107 @@ std::vector<CryptoNote::WalletOrder> convertWalletRpcOrdersToWalletOrders(const 
 
 }
 
-void generateNewWallet(const CryptoNote::Currency& currency, const WalletConfiguration& conf, Logging::ILogger& logger, System::Dispatcher& dispatcher) {
+void generateNewWallet(const CryptoNote::Currency& currency, const WalletConfiguration& conf, Logging::ILogger& logger, System::Dispatcher& dispatcher, CryptoNote::INode& node) {
   Logging::LoggerRef log(logger, "generateNewWallet");
 
-  CryptoNote::INode* nodeStub = NodeFactory::createNodeStub();
-  std::unique_ptr<CryptoNote::INode> nodeGuard(nodeStub);
-
-  CryptoNote::IWallet* wallet = new CryptoNote::WalletGreen(dispatcher, currency, *nodeStub, logger);
+  CryptoNote::IWallet* wallet = new CryptoNote::WalletGreen(dispatcher, currency, node, logger);
   std::unique_ptr<CryptoNote::IWallet> walletGuard(wallet);
 
-  log(Logging::INFO, Logging::BRIGHT_WHITE) << "Generating new wallet";
+  std::string address;
 
-  wallet->initialize(conf.walletFile, conf.walletPassword);
-  auto address = wallet->createAddress();
+  if (conf.secretSpendKey.empty() && conf.secretViewKey.empty() && conf.mnemonicSeed.empty())
+  {
+    if (conf.generateDeterministic) {
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "Generating new deterministic wallet";
 
-  log(Logging::INFO, Logging::BRIGHT_WHITE) << "New wallet is generated. Address: " << address;
+      Crypto::SecretKey private_view_key;
+      CryptoNote::KeyPair spendKey;
+
+      Crypto::generate_keys(spendKey.publicKey, spendKey.secretKey);
+      CryptoNote::AccountBase::generateViewFromSpend(spendKey.secretKey, private_view_key);
+
+      wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key);
+      address = wallet->createAddress(spendKey.secretKey);
+
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "New deterministic wallet is generated. Address: " << address;
+    }
+    else {
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "Generating new non-deterministic wallet";
+      wallet->initialize(conf.walletFile, conf.walletPassword);
+      address = wallet->createAddress();
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "New non-deterministic wallet is generated. Address: " << address;
+    }
+  } 
+  else if (!conf.mnemonicSeed.empty()) {
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "Importing wallet from mnemonic seed";
+
+      Crypto::SecretKey private_spend_key;
+      Crypto::SecretKey private_view_key;
+
+      std::string languageName;
+      if (!Crypto::ElectrumWords::words_to_bytes(conf.mnemonicSeed, private_spend_key, languageName))
+      {
+        log(Logging::ERROR, Logging::BRIGHT_RED) << "Electrum-style word list failed verification.";
+        return;
+      }
+
+      CryptoNote::AccountBase::generateViewFromSpend(private_spend_key, private_view_key);
+      if (conf.scanHeight != 0) {
+        wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key, conf.scanHeight);
+      }
+      else {
+        wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key);
+      }
+      address = wallet->createAddress(private_spend_key);
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "Imported wallet successfully.";
+  }
+  else {
+    if ((!conf.secretViewKey.empty() && conf.secretSpendKey.empty())
+      || (conf.secretViewKey.empty() && !conf.secretSpendKey.empty())) {
+  	  log(Logging::ERROR, Logging::BRIGHT_RED) << "Both the secret spend key and the secret view key are required.";
+  	  return;
+    } else {
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "Importing wallet from keys";
+      Crypto::Hash private_spend_key_hash;
+      Crypto::Hash private_view_key_hash;
+      size_t size;
+      if (!Common::fromHex(conf.secretSpendKey, &private_spend_key_hash, sizeof(private_spend_key_hash), size) || size != sizeof(private_spend_key_hash)) {
+        log(Logging::ERROR, Logging::BRIGHT_RED) << "Invalid spend key";
+        return;
+      }
+      if (!Common::fromHex(conf.secretViewKey, &private_view_key_hash, sizeof(private_view_key_hash), size) || size != sizeof(private_spend_key_hash)) {
+        log(Logging::ERROR, Logging::BRIGHT_RED) << "Invalid view key";
+        return;
+      }
+      Crypto::SecretKey private_spend_key = *(struct Crypto::SecretKey *) &private_spend_key_hash;
+      Crypto::SecretKey private_view_key = *(struct Crypto::SecretKey *) &private_view_key_hash;
+
+      if (conf.scanHeight != 0) {
+        wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key, conf.scanHeight);
+      }
+      else {
+        wallet->initializeWithViewKey(conf.walletFile, conf.walletPassword, private_view_key);
+      }
+      address = wallet->createAddress(private_spend_key);
+      log(Logging::INFO, Logging::BRIGHT_WHITE) << "Wallet imported successfully.";
+    }
+  }
 
   wallet->save(CryptoNote::WalletSaveLevel::SAVE_KEYS_ONLY);
   log(Logging::INFO, Logging::BRIGHT_WHITE) << "Wallet is saved";
+}
+
+void changePassword(const CryptoNote::Currency& currency, const WalletConfiguration& conf, Logging::ILogger& logger, System::Dispatcher& dispatcher, CryptoNote::INode& node, const std::string newPassword) {
+  Logging::LoggerRef log(logger, "changePassword");
+  log(Logging::INFO, Logging::BRIGHT_WHITE) << "Changing wallet password...";
+
+  CryptoNote::IWallet* wallet = new CryptoNote::WalletGreen(dispatcher, currency, node, logger);
+  std::unique_ptr<CryptoNote::IWallet> walletGuard(wallet);
+
+  wallet->start();
+  wallet->load(conf.walletFile, conf.walletPassword);
+  wallet->changePassword(conf.walletPassword, newPassword);
+  wallet->save();
 }
 
 WalletService::WalletService(const CryptoNote::Currency& currency, System::Dispatcher& sys, CryptoNote::INode& node,
@@ -419,7 +504,7 @@ std::error_code WalletService::resetWallet() {
   try {
     System::EventLock lk(readyEvent);
 
-    logger(Logging::INFO, Logging::BRIGHT_WHITE) << "Reseting wallet";
+    logger(Logging::INFO, Logging::BRIGHT_WHITE) << "Resetting wallet";
 
     if (!inited) {
       logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Reset impossible: Wallet Service is not initialized";
@@ -429,10 +514,61 @@ std::error_code WalletService::resetWallet() {
     reset();
     logger(Logging::INFO, Logging::BRIGHT_WHITE) << "Wallet has been reset";
   } catch (std::system_error& x) {
-    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while reseting wallet: " << x.what();
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while resetting wallet: " << x.what();
     return x.code();
   } catch (std::exception& x) {
-    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while reseting wallet: " << x.what();
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while resetting wallet: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+
+  return std::error_code();
+}
+
+std::error_code WalletService::resetWallet(const uint32_t scanHeight) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    logger(Logging::INFO, Logging::BRIGHT_WHITE) << "Resetting wallet";
+
+    if (!inited) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Reset impossible: Wallet Service is not initialized";
+      return make_error_code(CryptoNote::error::NOT_INITIALIZED);
+    }
+
+    wallet.reset(scanHeight);
+    logger(Logging::INFO, Logging::BRIGHT_WHITE) << "Wallet has been reset starting scanning from height " << scanHeight;
+  }
+  catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while resetting wallet: " << x.what();
+    return x.code();
+  }
+  catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while resetting wallet: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+
+  return std::error_code();
+}
+
+std::error_code WalletService::exportWallet(const std::string& fileName) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    if (!inited) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Export impossible: Wallet Service is not initialized";
+      return make_error_code(CryptoNote::error::NOT_INITIALIZED);
+    }
+
+    boost::filesystem::path walletPath(config.walletFile);
+    boost::filesystem::path exportPath = walletPath.parent_path() / fileName;
+
+    logger(Logging::INFO, Logging::BRIGHT_WHITE) << "Exporting wallet to " << exportPath.string();
+    wallet.exportWallet(exportPath.string());
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while exporting wallet: " << x.what();
+    return x.code();
+  } catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while exporting wallet: " << x.what();
     return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
   }
 
@@ -468,6 +604,37 @@ std::error_code WalletService::replaceWithNewWallet(const std::string& viewSecre
   return std::error_code();
 }
 
+std::error_code WalletService::replaceWithNewWallet(const std::string& viewSecretKeyText, const uint32_t scanHeight) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    Crypto::SecretKey viewSecretKey;
+    if (!Common::podFromHex(viewSecretKeyText, viewSecretKey)) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Cannot restore view secret key: " << viewSecretKeyText;
+      return make_error_code(CryptoNote::error::WalletServiceErrorCode::WRONG_KEY_FORMAT);
+    }
+
+    Crypto::PublicKey viewPublicKey;
+    if (!Crypto::secret_key_to_public_key(viewSecretKey, viewPublicKey)) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Cannot derive view public key, wrong secret key: " << viewSecretKeyText;
+      return make_error_code(CryptoNote::error::WalletServiceErrorCode::WRONG_KEY_FORMAT);
+    }
+
+    replaceWithNewWallet(viewSecretKey, scanHeight);
+    logger(Logging::INFO, Logging::BRIGHT_WHITE) << "The container has been replaced";
+  }
+  catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while replacing container: " << x.what();
+    return x.code();
+  }
+  catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while replacing container: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+
+  return std::error_code();
+}
+
 std::error_code WalletService::createAddress(const std::string& spendSecretKeyText, bool reset, std::string& address) {
   try {
     System::EventLock lk(readyEvent);
@@ -480,13 +647,111 @@ std::error_code WalletService::createAddress(const std::string& spendSecretKeyTe
       return make_error_code(CryptoNote::error::WalletServiceErrorCode::WRONG_KEY_FORMAT);
     }
 
-	address = wallet.createAddress(secretKey, reset);
+    address = wallet.createAddress(secretKey, reset);
   } catch (std::system_error& x) {
     logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while creating address: " << x.what();
     return x.code();
   }
 
   logger(Logging::DEBUGGING) << "Created address " << address;
+
+  return std::error_code();
+}
+
+std::error_code WalletService::createAddress(const std::string& spendSecretKeyText, const uint32_t scanHeight, std::string& address) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    logger(Logging::DEBUGGING) << "Creating address";
+
+    Crypto::SecretKey secretKey;
+    if (!Common::podFromHex(spendSecretKeyText, secretKey)) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Wrong key format: " << spendSecretKeyText;
+      return make_error_code(CryptoNote::error::WalletServiceErrorCode::WRONG_KEY_FORMAT);
+    }
+
+    address = wallet.createAddress(secretKey, scanHeight);
+  }
+  catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while creating address: " << x.what();
+    return x.code();
+  }
+
+  logger(Logging::DEBUGGING) << "Created address " << address;
+
+  return std::error_code();
+}
+std::error_code WalletService::createAddressList(const std::vector<std::string>& spendSecretKeysText, bool reset, std::vector<std::string>& addresses) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    logger(Logging::DEBUGGING) << "Creating " << spendSecretKeysText.size() << " addresses...";
+
+    std::vector<Crypto::SecretKey> secretKeys;
+    std::unordered_set<std::string> unique;
+    secretKeys.reserve(spendSecretKeysText.size());
+    unique.reserve(spendSecretKeysText.size());
+    for (auto& keyText : spendSecretKeysText) {
+      auto insertResult = unique.insert(keyText);
+      if (!insertResult.second) {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Not unique key";
+        return make_error_code(CryptoNote::error::WalletServiceErrorCode::DUPLICATE_KEY);
+      }
+
+      Crypto::SecretKey key;
+      if (!Common::podFromHex(keyText, key)) {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Wrong key format: " << keyText;
+        return make_error_code(CryptoNote::error::WalletServiceErrorCode::WRONG_KEY_FORMAT);
+      }
+
+      secretKeys.push_back(std::move(key));
+    }
+
+    addresses = wallet.createAddressList(secretKeys, reset);
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while creating addresses: " << x.what();
+    return x.code();
+  }
+
+  logger(Logging::DEBUGGING) << "Created " << addresses.size() << " addresses";
+
+  return std::error_code();
+}
+
+std::error_code WalletService::createAddressList(const std::vector<std::string>& spendSecretKeysText, const std::vector<uint32_t>& scanHeights, std::vector<std::string>& addresses) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    logger(Logging::DEBUGGING) << "Creating " << spendSecretKeysText.size() << " addresses...";
+
+    std::vector<Crypto::SecretKey> secretKeys;
+    std::unordered_set<std::string> unique;
+    secretKeys.reserve(spendSecretKeysText.size());
+    unique.reserve(spendSecretKeysText.size());
+    for (auto& keyText : spendSecretKeysText) {
+      auto insertResult = unique.insert(keyText);
+      if (!insertResult.second) {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Not unique key";
+        return make_error_code(CryptoNote::error::WalletServiceErrorCode::DUPLICATE_KEY);
+      }
+
+      Crypto::SecretKey key;
+      if (!Common::podFromHex(keyText, key)) {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Wrong key format: " << keyText;
+        return make_error_code(CryptoNote::error::WalletServiceErrorCode::WRONG_KEY_FORMAT);
+      }
+
+      secretKeys.push_back(std::move(key));
+    }
+
+    addresses = wallet.createAddressList(secretKeys, scanHeights);
+  }
+  catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while creating addresses: " << x.what();
+    return x.code();
+  }
+
+  logger(Logging::DEBUGGING) << "Created " << addresses.size() << " addresses";
 
   return std::error_code();
 }
@@ -530,6 +795,28 @@ std::error_code WalletService::createTrackingAddress(const std::string& spendPub
   return std::error_code();
 }
 
+std::error_code WalletService::createTrackingAddress(const std::string& spendPublicKeyText, const uint32_t scanHeight, std::string& address) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    logger(Logging::DEBUGGING) << "Creating tracking address";
+
+    Crypto::PublicKey publicKey;
+    if (!Common::podFromHex(spendPublicKeyText, publicKey)) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Wrong key format: " << spendPublicKeyText;
+      return make_error_code(CryptoNote::error::WalletServiceErrorCode::WRONG_KEY_FORMAT);
+    }
+
+    address = wallet.createAddress(publicKey, scanHeight);
+  }
+  catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while creating tracking address: " << x.what();
+    return x.code();
+  }
+
+  logger(Logging::DEBUGGING) << "Created address " << address;
+  return std::error_code();
+}
 std::error_code WalletService::deleteAddress(const std::string& address) {
   try {
     System::EventLock lk(readyEvent);
@@ -618,6 +905,35 @@ std::error_code WalletService::getViewKey(std::string& viewSecretKey) {
     viewSecretKey = Common::podToHex(viewKey.secretKey);
   } catch (std::system_error& x) {
     logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting view key: " << x.what();
+    return x.code();
+  }
+
+  return std::error_code();
+}
+
+std::error_code WalletService::getMnemonicSeed(const std::string& address, std::string& mnemonicSeed) {
+  try {
+    System::EventLock lk(readyEvent);
+    CryptoNote::KeyPair key = wallet.getAddressSpendKey(address);
+    CryptoNote::KeyPair viewKey = wallet.getViewKey();
+
+    Crypto::SecretKey deterministic_private_view_key;
+
+    CryptoNote::AccountBase::generateViewFromSpend(key.secretKey, deterministic_private_view_key);
+
+    bool deterministic_private_keys = deterministic_private_view_key == viewKey.secretKey;
+
+    if (deterministic_private_keys) {
+      Crypto::ElectrumWords::bytes_to_words(key.secretKey, mnemonicSeed, "English");
+    } else {
+      /* Have to be able to derive view key from spend key to create a mnemonic
+         seed, due to being able to generate multiple addresses we can't do
+         this in walletd as the default */
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Your private keys are not deterministic and so a mnemonic seed cannot be generated!";
+      return make_error_code(CryptoNote::error::WalletServiceErrorCode::KEYS_NOT_DETERMINISTIC);
+    }
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting mnemonic seed: " << x.what();
     return x.code();
   }
 
@@ -762,6 +1078,141 @@ std::error_code WalletService::getTransaction(const std::string& transactionHash
   return std::error_code();
 }
 
+std::error_code WalletService::getTransactionSecretKey(const std::string& transactionHash, std::string& transactionSecretKey) {
+  try {
+    System::EventLock lk(readyEvent);
+    Crypto::Hash hash = parseHash(transactionHash, logger);
+
+    Crypto::SecretKey txSecretKey = wallet.getTransactionSecretKey(hash);
+
+	if (txSecretKey == CryptoNote::NULL_SECRET_KEY) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Transaction " << transactionHash << " secret key is not available";
+      return make_error_code(CryptoNote::error::OBJECT_NOT_FOUND);
+    }
+
+    transactionSecretKey = Common::podToHex(txSecretKey);
+
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting transaction secret key: " << x.what();
+    return x.code();
+  } catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting transaction secret key: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+
+  return std::error_code();
+}
+
+std::error_code WalletService::getTransactionProof(const std::string& transactionHash, const std::string& destinationAddress, const std::string& transactionSecretKey, std::string& transactionProof) {
+  try {
+    System::EventLock lk(readyEvent);
+    Crypto::Hash hash = parseHash(transactionHash, logger);
+
+    Crypto::SecretKey txSecretKey = wallet.getTransactionSecretKey(hash);
+
+    if (!transactionSecretKey.empty()) {  
+      Crypto::SecretKey txSecretKeyFromReq;
+      Crypto::Hash tx_key_hash;
+      size_t size;
+      if (!Common::fromHex(transactionSecretKey, &tx_key_hash, sizeof(tx_key_hash), size) || size != sizeof(tx_key_hash)) {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Failed to parse tx secret key: " << transactionSecretKey;
+        return make_error_code(CryptoNote::error::WRONG_TX_SECRET_KEY);
+      }
+	  txSecretKeyFromReq = *(struct Crypto::SecretKey *) &tx_key_hash;
+
+	  if (txSecretKey != CryptoNote::NULL_SECRET_KEY && txSecretKey != txSecretKeyFromReq) {
+        logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Transaction secret keys do not match";
+        return make_error_code(CryptoNote::error::WRONG_TX_SECRET_KEY);
+      }
+      txSecretKey = txSecretKeyFromReq;
+    }
+    else if (txSecretKey == CryptoNote::NULL_SECRET_KEY) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Transaction secret key not found";
+      return make_error_code(CryptoNote::error::WRONG_PARAMETERS);
+    }
+
+    CryptoNote::AccountPublicAddress destAddress;
+    if (!currency.parseAccountAddressString(destinationAddress, destAddress)) {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Failed to parse address: " << destinationAddress;
+      return make_error_code(CryptoNote::error::BAD_ADDRESS);
+    }
+
+    std::string sig_str;
+    if (wallet.getTransactionProof(hash, destAddress, txSecretKey, sig_str)) {
+      transactionProof = sig_str;
+    }
+    else {
+      logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Failed to get transaction proof";
+      return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+    }
+
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting transaction proof: " << x.what();
+    return x.code();
+  } catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting transaction proof: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+
+  return std::error_code();
+}
+
+std::error_code WalletService::getReserveProof(std::string& reserveProof, const std::string& address, const std::string& message, const uint64_t& amount) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    uint64_t balance = wallet.getActualBalance(address);
+    if (amount != 0 && balance < amount) {
+      return make_error_code(CryptoNote::error::WRONG_AMOUNT);
+    }
+
+    reserveProof = wallet.getReserveProof(amount != 0 ? amount : balance, address, !message.empty() ? message : "");
+
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting transaction secret key: " << x.what();
+    return x.code();
+  } catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while getting transaction secret key: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+
+  return std::error_code();
+}
+
+std::error_code WalletService::signMessage(const std::string& message, const std::string& address, std::string& signature) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    signature = wallet.signMessage(message, address);
+  }
+  catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while signing message: " << x.what();
+    return x.code();
+  }
+  catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while signing message: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+  return std::error_code();
+}
+
+std::error_code WalletService::verifyMessage(const std::string& message, const std::string& signature, const std::string& address, bool& isValid) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    isValid = wallet.verifyMessage(message, address, signature);
+  }
+  catch (std::system_error& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while verifying message: " << x.what();
+    return x.code();
+  }
+  catch (std::exception& x) {
+    logger(Logging::WARNING, Logging::BRIGHT_YELLOW) << "Error while verifying message: " << x.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+  return std::error_code();
+}
+
 std::error_code WalletService::getAddresses(std::vector<std::string>& addresses) {
   try {
     System::EventLock lk(readyEvent);
@@ -780,6 +1231,19 @@ std::error_code WalletService::getAddresses(std::vector<std::string>& addresses)
   return std::error_code();
 }
 
+std::error_code WalletService::getAddressesCount(size_t& addressesCount) {
+  try {
+    System::EventLock lk(readyEvent);
+
+    addressesCount = wallet.getAddressCount();
+  }
+  catch (std::exception& e) {
+    logger(Logging::WARNING) << "Can't get addresses count : " << e.what();
+    return make_error_code(CryptoNote::error::INTERNAL_WALLET_ERROR);
+  }
+
+  return std::error_code();
+}
 std::error_code WalletService::sendTransaction(const SendTransaction::Request& request, std::string& transactionHash, std::string& transactionSecretKey) {
   try {
     System::EventLock lk(readyEvent);
@@ -789,7 +1253,7 @@ std::error_code WalletService::sendTransaction(const SendTransaction::Request& r
     if (!request.changeAddress.empty()) {
       validateAddresses({ request.changeAddress }, currency, logger);
     }
-	validateMixin(request.anonymity, currency, logger);
+    validateMixin(request.anonymity, currency, logger);
 
     CryptoNote::TransactionParameters sendParams;
     if (!request.paymentId.empty()) {
@@ -805,10 +1269,10 @@ std::error_code WalletService::sendTransaction(const SendTransaction::Request& r
     sendParams.unlockTimestamp = request.unlockTime;
     sendParams.changeDestination = request.changeAddress;
 
-	Crypto::SecretKey tx_key;
+    Crypto::SecretKey tx_key;
     size_t transactionId = wallet.transfer(sendParams, tx_key);
     transactionHash = Common::podToHex(wallet.getTransaction(transactionId).hash);
-	transactionSecretKey = Common::podToHex(tx_key);
+    transactionSecretKey = Common::podToHex(tx_key);
 
     logger(Logging::DEBUGGING) << "Transaction " << transactionHash << " has been sent";
   } catch (std::system_error& x) {
@@ -984,19 +1448,19 @@ std::error_code WalletService::getStatus(uint32_t& blockCount, uint32_t& knownBl
   return std::error_code();
 }
 
-std::error_code WalletService::validateAddress(const std::string& address, bool& isvalid, std::string& _address, std::string& spendPublicKey, std::string& viewPublicKey) {
+std::error_code WalletService::validateAddress(const std::string& address, bool& isValid, std::string& _address, std::string& spendPublicKey, std::string& viewPublicKey) {
   try {
     System::EventLock lk(readyEvent);
 
     CryptoNote::AccountPublicAddress acc = boost::value_initialized<AccountPublicAddress>();
     if (currency.parseAccountAddressString(address, acc)) {
-      isvalid = true;
+      isValid = true;
       _address = currency.accountAddressAsString(acc);
       spendPublicKey = Common::podToHex(acc.spendPublicKey);
       viewPublicKey = Common::podToHex(acc.viewPublicKey);
     }
     else {
-      isvalid = false;
+      isValid = false;
     }
   }
   catch (std::system_error& x) {
@@ -1085,6 +1549,34 @@ void WalletService::reset() {
 
   wallet.start();
   init();
+}
+
+void WalletService::replaceWithNewWallet(const Crypto::SecretKey& viewSecretKey, const uint32_t scanHeight) {
+  wallet.stop();
+  wallet.shutdown();
+  inited = false;
+  refreshContext.wait();
+
+  transactionIdIndex.clear();
+
+  size_t i = 0;
+  for (;;) {
+    boost::system::error_code ec;
+    std::string backup = config.walletFile + ".backup";
+    if (i != 0) {
+      backup += "." + std::to_string(i);
+    }
+
+    if (!boost::filesystem::exists(backup)) {
+      boost::filesystem::rename(config.walletFile, backup);
+      logger(Logging::DEBUGGING) << "Walletd file '" << config.walletFile  << "' backed up to '" << backup << '\'';
+      break;
+    }
+  }
+
+  wallet.start();
+  wallet.initializeWithViewKey(config.walletFile, config.walletPassword, viewSecretKey, scanHeight);
+  inited = true;
 }
 
 void WalletService::replaceWithNewWallet(const Crypto::SecretKey& viewSecretKey) {

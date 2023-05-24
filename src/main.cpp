@@ -1,6 +1,5 @@
 // Copyright (c) 2011-2015 The Cryptonote developers
-// Copyright (c) 2016-2017 The Karbowanec developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016-2020 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <QApplication>
@@ -10,6 +9,7 @@
 #include <QLockFile>
 #include <QMessageBox>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QSplashScreen>
 #include <QStyleFactory>
 #include <QSettings>
@@ -26,13 +26,27 @@
 #include "Update.h"
 #include "PaymentServer.h"
 #include "TranslatorManager.h"
+#include "LogFileWatcher.h"
 
 #define DEBUG 1
 
 using namespace WalletGui;
 
-int main(int argc, char* argv[]) {
+const QRegularExpression LOG_SPLASH_REG_EXP("\\] ");
 
+QSplashScreen* splash(nullptr);
+
+inline void newLogString(const QString& _string) {
+  QRegularExpressionMatch match = LOG_SPLASH_REG_EXP.match(_string);
+  if (match.hasMatch()) {
+    QString message = _string.mid(match.capturedEnd());
+    splash->showMessage(message, Qt::AlignLeft | Qt::AlignBottom, Qt::white);
+  }
+}
+
+int main(int argc, char* argv[]) {
+  QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+  QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
   QApplication app(argc, argv);
   app.setApplicationName(CurrencyAdapter::instance().getCurrencyName() + "V5wallet");
   app.setApplicationVersion(Settings::instance().getVersion());
@@ -53,10 +67,21 @@ int main(int argc, char* argv[]) {
 
   setlocale(LC_ALL, "");
 
-  QFile File(":/skin/default.qss");
-  File.open(QFile::ReadOnly);
-  QString StyleSheet = QLatin1String(File.readAll());
-  qApp->setStyleSheet(StyleSheet);
+  QFile File1(":/qdarkstyle/style.qss");
+  File1.open(QFile::ReadOnly);
+  QString StyleSheet1 = QLatin1String(File1.readAll());
+
+  QFile File2(":/skin/dark.qss");
+  File2.open(QFile::ReadOnly);
+  QString StyleSheet2 = QLatin1String(File2.readAll());
+
+  // fix font sizes for MacOS
+  const char MAC_FIX_STYLE_SHEET[] = "QWidget{font-size:12px}";
+#ifdef Q_OS_MAC
+  qApp->setStyleSheet(MAC_FIX_STYLE_SHEET + StyleSheet1 + StyleSheet2);
+#else
+  qApp->setStyleSheet(StyleSheet1 + StyleSheet2);
+#endif
 
   if (PaymentServer::ipcSendCommandLine())
   exit(0);
@@ -85,7 +110,7 @@ int main(int argc, char* argv[]) {
   QProcess exec;
 
   //as root
-  args << "-c" << "printf '[Desktop Entry]\\nName = PluraCoin URL Handler\\nGenericName = PluraCoin\\nComment = Handle URL Scheme pluracoin://\\nExec = " + QCoreApplication::applicationFilePath() + " %%u\\nTerminal = false\\nType = Application\\nMimeType = x-scheme-handler/pluracoin;\\nIcon = PluraCoin-Wallet' | tee /usr/share/applications/pluracoin-handler.desktop";
+  args << "-c" << "printf '[Desktop Entry]\\nName = Karbo URL Handler\\nGenericName = Karbo\\nComment = Handle URL Sheme pluracoin://\\nExec = " + QCoreApplication::applicationFilePath() + " %%u\\nTerminal = false\\nType = Application\\nMimeType = x-scheme-handler/pluracoin;\\nIcon = PluraCoin-Wallet' | tee /usr/share/applications/pluracoin-handler.desktop";
   exec.start("/bin/sh", args);
   exec.waitForFinished();
 
@@ -112,24 +137,49 @@ int main(int argc, char* argv[]) {
   SignalHandler::instance().init();
   QObject::connect(&SignalHandler::instance(), &SignalHandler::quitSignal, &app, &QApplication::quit);
 
-  QSplashScreen* splash = new QSplashScreen(QPixmap(":images/splash"), /*Qt::WindowStaysOnTopHint |*/ Qt::X11BypassWindowManagerHint);
+  if (splash == nullptr) {
+    splash = new QSplashScreen(QPixmap(":images/splash"), Qt::X11BypassWindowManagerHint);
+  }
+
   if (!splash->isVisible()) {
     splash->show();
   }
 
-  splash->showMessage(QObject::tr("Loading blockchain..."), Qt::AlignCenter | Qt::AlignBottom, Qt::white);
+  splash->showMessage(QObject::tr("Loading blockchain..."), Qt::AlignLeft | Qt::AlignBottom, Qt::white);
+
+  LogFileWatcher* logWatcher(nullptr);
+  if (logWatcher == nullptr) {
+    logWatcher = new LogFileWatcher(Settings::instance().getDataDir().absoluteFilePath(QCoreApplication::applicationName() + ".log"), &app);
+    QObject::connect(logWatcher, &LogFileWatcher::newLogStringSignal, &app, &newLogString);
+  }
 
   app.processEvents();
   qRegisterMetaType<CryptoNote::TransactionId>("CryptoNote::TransactionId");
+  qRegisterMetaType<QList<CryptoNote::TransactionOutputInformation>>("QList<CryptoNote::TransactionOutputInformation>");
   qRegisterMetaType<quintptr>("quintptr");
   if (!NodeAdapter::instance().init()) {
     return 0;
   }
+
   splash->finish(&MainWindow::instance());
+
+  if (logWatcher != nullptr) {
+    logWatcher->deleteLater();
+    logWatcher = nullptr;
+  }
+
+  splash->deleteLater();
+  splash = nullptr;
+
   Updater *d = new Updater();
   d->checkForUpdate();
+
   MainWindow::instance().show();
-  WalletAdapter::instance().open("");
+  QString lastWallet = Settings::instance().getWalletFile();
+  if (!lastWallet.isEmpty()) {
+    WalletAdapter::instance().setWalletFile(lastWallet);
+    WalletAdapter::instance().open("");
+  }
 
   QTimer::singleShot(1000, paymentServer, SLOT(uiReady()));
   QObject::connect(paymentServer, &PaymentServer::receivedURI, &MainWindow::instance(), &MainWindow::handlePaymentRequest, Qt::QueuedConnection);

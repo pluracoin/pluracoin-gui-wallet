@@ -2,30 +2,33 @@
 // Copyright(c) 2014 - 2017 XDN - project developers
 // Copyright(c) 2018 The Plura developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "PaymentGateService.h"
 
 #include <future>
+#include <boost/filesystem.hpp>
 
 #include "Common/SignalHandler.h"
+#include "Common/UrlTools.h"
 #include "InProcessNode/InProcessNode.h"
 #include "Logging/LoggerRef.h"
 #include "PaymentGate/PaymentServiceJsonRpcServer.h"
 
+#include "Checkpoints/CheckpointsData.h"
 #include "CryptoNoteCore/CoreConfig.h"
 #include "CryptoNoteCore/Core.h"
 #include "CryptoNoteProtocol/CryptoNoteProtocolHandler.h"
@@ -45,6 +48,26 @@
 
 using namespace PaymentService;
 
+bool validateCertPath(const std::string& rootPath,
+                      const std::string& config_chain_file,
+                      const std::string& config_key_file,
+                      std::string& chain_file,
+                      std::string& key_file) {
+  bool res = false;
+  boost::system::error_code ec;
+  boost::filesystem::path data_dir_path(rootPath);
+  boost::filesystem::path chain_file_path(config_chain_file);
+  boost::filesystem::path key_file_path(config_key_file);
+  if (!chain_file_path.has_parent_path()) chain_file_path = data_dir_path / chain_file_path;
+  if (!key_file_path.has_parent_path()) key_file_path = data_dir_path / key_file_path;
+  if (boost::filesystem::exists(chain_file_path, ec) &&
+      boost::filesystem::exists(key_file_path, ec)) {
+        chain_file = boost::filesystem::canonical(chain_file_path).string();
+        key_file = boost::filesystem::canonical(key_file_path).string();
+        res = true;
+  }
+  return res;
+}
 void changeDirectory(const std::string& path) {
   if (chdir(path.c_str())) {
     throw std::runtime_error("Couldn't change directory to \'" + path + "\': " + strerror(errno));
@@ -104,7 +127,11 @@ bool PaymentGateService::init(int argc, char** argv) {
 WalletConfiguration PaymentGateService::getWalletConfig() const {
   return WalletConfiguration{
     config.gateConfiguration.containerFile,
-    config.gateConfiguration.containerPassword
+    config.gateConfiguration.containerPassword,
+    config.gateConfiguration.secretViewKey,
+    config.gateConfiguration.secretSpendKey,
+    config.gateConfiguration.mnemonicSeed,
+    config.gateConfiguration.generateDeterministic
   };
 }
 
@@ -124,7 +151,13 @@ void PaymentGateService::run() {
 
   Logging::LoggerRef log(logger, "run");
 
-  if (config.startInprocess) {
+  //check the container exists before starting service
+  const std::string walletFileName = config.gateConfiguration.containerFile;
+  if (!config.gateConfiguration.generateNewContainer && !boost::filesystem::exists(walletFileName)) {
+    log(Logging::ERROR) << "A wallet with the filename "
+      << walletFileName << " doesn't exist! "
+      << "Ensure you entered your wallet name correctly.";
+  } else if (config.startInprocess) {
     runInProcess(log);
   } else {
     runRpcProxy(log);
@@ -162,7 +195,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   log(Logging::INFO) << "Starting Payment Gate with local node";
 
   CryptoNote::Currency currency = currencyBuilder.currency();
-  CryptoNote::core core(currency, NULL, logger, false);
+  CryptoNote::Core core(currency, NULL, logger, *dispatcher, false);
 
   CryptoNote::CryptoNoteProtocolHandler protocol(currency, *dispatcher, core, NULL, logger);
   CryptoNote::NodeServer p2pNode(*dispatcher, protocol, logger);
@@ -170,11 +203,10 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   for (const auto& cp : CryptoNote::CHECKPOINTS) {
     checkpoints.add_checkpoint(cp.height, cp.blockId);
   }
-  checkpoints.load_checkpoints_from_dns(config.gateConfiguration.testnet);
-  core.set_checkpoints(std::move(checkpoints));
-  /*if (!config.gateConfiguration.testnet) {
+  checkpoints.load_checkpoints_from_dns();
+  if (!config.gateConfiguration.testnet) {
     core.set_checkpoints(std::move(checkpoints));
-  }*/
+  }
 
   protocol.set_p2p_endpoint(&p2pNode);
   core.set_cryptonote_protocol(&protocol);
@@ -219,7 +251,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
 
   p2pStarted.wait();
 
-  runWalletService(currency, *node);
+  runWalletServiceOr(currency, *node);
 
   p2pNode.sendStopSignal();
   context.get();
@@ -232,12 +264,36 @@ void PaymentGateService::runRpcProxy(Logging::LoggerRef& log) {
   log(Logging::INFO) << "Starting Payment Gate with remote node";
   CryptoNote::Currency currency = currencyBuilder.currency();
 
+  std::string _daemon_address = config.remoteNodeConfig.m_daemon_host + ":" + std::to_string(config.remoteNodeConfig.m_daemon_port), _daemon_host, _daemon_path;
+  uint16_t _daemon_port;
+  bool _daemon_ssl;
+
+  if (!Common::parseUrlAddress(_daemon_address, _daemon_host, _daemon_port, _daemon_path, _daemon_ssl))
+  {
+    Logging::LoggerRef(logger, "run")(Logging::ERROR, Logging::BRIGHT_RED) << "Failed to parse daemon address: " << _daemon_address;
+    return;
+  }
+  
   std::unique_ptr<CryptoNote::INode> node(
     PaymentService::NodeFactory::createNode(
-      config.remoteNodeConfig.daemonHost,
-      config.remoteNodeConfig.daemonPort));
+      config.remoteNodeConfig.m_daemon_host,
+      config.remoteNodeConfig.m_daemon_port,
+      _daemon_path,
+      _daemon_ssl));
 
-  runWalletService(currency, *node);
+  runWalletServiceOr(currency, *node);
+}
+
+void PaymentGateService::runWalletServiceOr(const CryptoNote::Currency& currency, CryptoNote::INode& node) {
+  if (config.gateConfiguration.generateNewContainer) {
+    generateNewWallet(currency, getWalletConfig(), logger, *dispatcher, node);
+  }
+  else if (config.gateConfiguration.changePassword) {
+    changePassword(currency, getWalletConfig(), logger, *dispatcher, node, config.gateConfiguration.newContainerPassword);
+  }
+  else {
+    runWalletService(currency, node);
+  }
 }
 
 void PaymentGateService::runWalletService(const CryptoNote::Currency& currency, CryptoNote::INode& node) {
@@ -266,10 +322,33 @@ void PaymentGateService::runWalletService(const CryptoNote::Currency& currency, 
     }
   } else {
     PaymentService::PaymentServiceJsonRpcServer rpcServer(*dispatcher, *stopEvent, *service, logger);
-    rpcServer.start(config.gateConfiguration.bindAddress, config.gateConfiguration.bindPort, config.gateConfiguration.m_rpcUser, config.gateConfiguration.m_rpcPassword);
+    bool rpc_run_ssl = false;
+    std::string rpc_chain_file = "";
+    std::string rpc_key_file = "";
 
+    if (config.gateConfiguration.m_enable_ssl) {
+      if (validateCertPath(config.coreConfig.configFolder,
+        config.gateConfiguration.m_chain_file,
+        config.gateConfiguration.m_key_file,
+        rpc_chain_file,
+        rpc_key_file)){
+        rpc_run_ssl = true;
+      } else {
+        Logging::LoggerRef(logger, "PaymentGateService")(Logging::ERROR, Logging::BRIGHT_RED) << "Start JSON-RPC SSL server was canceled because certificate file(s) could not be found" << std::endl;
+      }
+    }
+    rpcServer.init(rpc_chain_file, rpc_key_file, rpc_run_ssl);
+
+    rpcServer.setAuth(config.gateConfiguration.m_rpcUser, config.gateConfiguration.m_rpcPassword);
+
+    Tools::SignalHandler::install([&rpcServer] {
+      rpcServer.stop();
+    });
+
+    rpcServer.start(config.gateConfiguration.m_bind_address,
+                    config.gateConfiguration.m_bind_port,
+                    config.gateConfiguration.m_bind_port_ssl);
     Logging::LoggerRef(logger, "PaymentGateService")(Logging::INFO, Logging::BRIGHT_WHITE) << "JSON-RPC server stopped, stopping wallet service...";
-
     try {
       service->saveWallet();
     } catch (std::exception& ex) {

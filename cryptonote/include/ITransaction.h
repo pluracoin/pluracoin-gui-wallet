@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -60,6 +60,7 @@ public:
 
   virtual Crypto::Hash getTransactionHash() const = 0;
   virtual Crypto::Hash getTransactionPrefixHash() const = 0;
+  virtual Crypto::Hash getTransactionInputsHash() const = 0;
   virtual Crypto::PublicKey getTransactionPublicKey() const = 0;
   virtual bool getTransactionSecretKey(Crypto::SecretKey& key) const = 0;
   virtual uint64_t getUnlockTime() const = 0;
@@ -75,6 +76,7 @@ public:
   virtual TransactionTypes::InputType getInputType(size_t index) const = 0;
   virtual void getInput(size_t index, KeyInput& input) const = 0;
   virtual void getInput(size_t index, MultisignatureInput& input) const = 0;
+  virtual std::vector<TransactionInput> getInputs() const = 0;
 
   // outputs
   virtual size_t getOutputCount() const = 0;
@@ -94,6 +96,8 @@ public:
 
   // serialized transaction
   virtual BinaryArray getTransactionData() const = 0;
+
+  virtual TransactionPrefix getTransactionPrefix() const = 0;
 };
 
 //

@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2015 The Cryptonote developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016-2019 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,7 @@
 
 #include "SortedTransactionsModel.h"
 #include "TransactionsModel.h"
+#include "Settings.h"
 
 namespace WalletGui {
 
@@ -39,20 +40,26 @@ bool SortedTransactionsModel::filterAcceptsRow(int _row, const QModelIndex &_par
 
   int txType = _index.data(TransactionsModel::ROLE_TYPE).value<quint8>();
 
-  if(selectedtxtype != 4) {
+  if(selectedtxtype != -1) {
     if(txType != selectedtxtype)
       return false;
+  }
+
+  if (Settings::instance().skipFusionTransactions() && txType == 4) {
+    return false;
   }
 
   QModelIndex index2 = sourceModel()->index(_row, 2, _parent);
   QModelIndex index3 = sourceModel()->index(_row, 3, _parent);
   QModelIndex index4 = sourceModel()->index(_row, 4, _parent);
   QModelIndex index5 = sourceModel()->index(_row, 5, _parent);
+  QModelIndex index6 = sourceModel()->index(_row, 6, _parent);
 
   return (sourceModel()->data(index2).toString().contains(searchstring,Qt::CaseInsensitive)
        || sourceModel()->data(index3).toString().contains(searchstring,Qt::CaseInsensitive)
        || sourceModel()->data(index4).toString().contains(searchstring,Qt::CaseInsensitive)
-       || sourceModel()->data(index5).toString().contains(searchstring,Qt::CaseInsensitive));
+       || sourceModel()->data(index5).toString().contains(searchstring,Qt::CaseInsensitive)
+       || sourceModel()->data(index6).toString().contains(searchstring,Qt::CaseInsensitive));
 
   return true;
  }

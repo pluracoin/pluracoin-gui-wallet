@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -28,6 +28,7 @@
 #include "CryptoNoteConfig.h"
 #include <Logging/LoggerRef.h>
 
+#undef ERROR
 namespace CryptoNote {
   class UpgradeDetectorBase {
   public:
@@ -55,7 +56,7 @@ namespace CryptoNote {
           m_votingCompleteHeight = UNDEF_HEIGHT;
 
         } else if (m_targetVersion - 1 == m_blockchain.back().bl.majorVersion) {
-          m_votingCompleteHeight = findVotingCompleteHeight(m_blockchain.size() - 1);
+          m_votingCompleteHeight = findVotingCompleteHeight(static_cast<uint32_t>(m_blockchain.size()) - 1);
 
         } else if (m_targetVersion <= m_blockchain.back().bl.majorVersion) {
           auto it = std::lower_bound(m_blockchain.begin(), m_blockchain.end(), m_targetVersion,
@@ -65,7 +66,7 @@ namespace CryptoNote {
             return false;
           }
 
-          uint32_t upgradeHeight = it - m_blockchain.begin();
+          uint32_t upgradeHeight = static_cast<uint32_t>(it - m_blockchain.begin());
           m_votingCompleteHeight = findVotingCompleteHeight(upgradeHeight);
           if (m_votingCompleteHeight == UNDEF_HEIGHT) {
             logger(Logging::ERROR, Logging::BRIGHT_RED) << "Internal error: voting complete height isn't found, upgrade height = " << upgradeHeight;
@@ -89,6 +90,7 @@ namespace CryptoNote {
               " has invalid version " << blockVersionAtUpgradeHeight <<
               ", expected " << static_cast<int>(m_targetVersion - 1);
             return false;
+
           }
 
           int blockVersionAfterUpgradeHeight = m_blockchain[upgradeHeight + 1].bl.majorVersion;
@@ -152,7 +154,7 @@ namespace CryptoNote {
         }
 
       } else {
-        uint32_t lastBlockHeight = m_blockchain.size() - 1;
+        uint32_t lastBlockHeight = static_cast<uint32_t>(m_blockchain.size()) - 1;
         if (isVotingComplete(lastBlockHeight)) {
           m_votingCompleteHeight = lastBlockHeight;
           logger(Logging::INFO, Logging::BRIGHT_GREEN) << "###### UPGRADE voting complete at block index " << m_votingCompleteHeight <<
@@ -193,7 +195,7 @@ namespace CryptoNote {
       assert(m_currency.upgradeHeight(m_targetVersion) == UNDEF_HEIGHT);
 
       uint32_t probableVotingCompleteHeight = probableUpgradeHeight > m_currency.maxUpgradeDistance() ? probableUpgradeHeight - m_currency.maxUpgradeDistance() : 0;
-      for (size_t i = probableVotingCompleteHeight; i <= probableUpgradeHeight; ++i) {
+      for (uint32_t i = probableVotingCompleteHeight; i <= probableUpgradeHeight; ++i) {
         if (isVotingComplete(i)) {
           return i;
         }

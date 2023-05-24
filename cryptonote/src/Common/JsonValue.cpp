@@ -7,6 +7,7 @@
 
 #include "JsonValue.h"
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 
 namespace Common {
@@ -108,7 +109,7 @@ JsonValue::JsonValue(Bool value) : type(BOOL), valueBool(value) {
 JsonValue::JsonValue(Integer value) : type(INTEGER), valueInteger(value) {
 }
 
-JsonValue::JsonValue(Nil) : type(NIL) {
+JsonValue::JsonValue(Nile) : type(NIL) {
 }
 
 JsonValue::JsonValue(const Object& value) {
@@ -307,7 +308,7 @@ JsonValue& JsonValue::operator=(Integer value) {
   return *this;
 }
 
-JsonValue& JsonValue::operator=(Nil) {
+JsonValue& JsonValue::operator=(Nile) {
   if (type != NIL) {
     destructValue();
     type = NIL;
@@ -565,6 +566,17 @@ JsonValue JsonValue::fromString(const std::string& source) {
   JsonValue jsonValue;
   std::istringstream stream(source);
   stream >> jsonValue;
+  if (stream.fail()) {
+    throw std::runtime_error("Unable to parse JsonValue");
+  }
+
+  return jsonValue;
+}
+
+JsonValue JsonValue::fromStringWithWhiteSpaces(const std::string& source) {
+  JsonValue jsonValue;
+  std::istringstream stream(source);
+  stream >> std::noskipws >> jsonValue;
   if (stream.fail()) {
     throw std::runtime_error("Unable to parse JsonValue");
   }

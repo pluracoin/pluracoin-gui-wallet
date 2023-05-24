@@ -2,20 +2,20 @@
 // Copyright (c) 2016, The Karbowanec developers
 // Copyright (c) 2018, The Pluracoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -81,7 +81,9 @@ public:
   uint64_t coin() const { return m_coin; }
 
   uint64_t minimumFee() const { return m_minimumFee; }
-  uint64_t getMinimalFee(uint64_t dailyDifficulty, uint64_t reward, uint64_t avgHistoricalDifficulty, uint64_t medianHistoricalReward, uint32_t height) const;
+  uint64_t getMinimalFee(const uint32_t height) const;
+  uint64_t getFeePerByte(const uint64_t txExtraSize, const uint64_t minFee) const;
+
   uint64_t defaultDustThreshold() const { return m_defaultDustThreshold; }
 
   uint64_t difficultyTarget() const { return m_difficultyTarget; }
@@ -104,6 +106,7 @@ public:
   size_t difficultyBlocksCount3() const { return CryptoNote::parameters::DIFFICULTY_WINDOW_V3; }
   size_t difficultyBlocksCount4() const { return CryptoNote::parameters::DIFFICULTY_WINDOW_V4; }
   size_t difficultyBlocksCount5() const { return CryptoNote::parameters::DIFFICULTY_WINDOW_V5; }
+  size_t difficultyBlocksCount6() const { return CryptoNote::parameters::DIFFICULTY_WINDOW_V6; }
 
   size_t maxBlockSizeInitial() const { return m_maxBlockSizeInitial; }
   uint64_t maxBlockSizeGrowthSpeedNumerator() const { return m_maxBlockSizeGrowthSpeedNumerator; }
@@ -139,12 +142,13 @@ public:
   const Block& genesisBlock() const { return m_genesisBlock; }
   const Crypto::Hash& genesisBlockHash() const { return m_genesisBlockHash; }
 
+  uint64_t calculateReward(uint64_t alreadyGeneratedCoins) const;
   bool getBlockReward(uint8_t blockMajorVersion, size_t medianSize, size_t currentBlockSize, uint64_t alreadyGeneratedCoins, uint64_t fee,
     uint64_t& reward, int64_t& emissionChange, uint32_t height) const;
   size_t maxBlockCumulativeSize(uint64_t height) const;
 
   bool constructMinerTx(uint8_t blockMajorVersion, uint32_t height, size_t medianSize, uint64_t alreadyGeneratedCoins, size_t currentBlockSize,
-    uint64_t fee, const AccountPublicAddress& minerAddress, Transaction& tx, const BinaryArray& extraNonce = BinaryArray(), size_t maxOuts = 1) const;
+    uint64_t fee, const AccountPublicAddress& minerAddress, Transaction& tx, Crypto::SecretKey& txKey, const BinaryArray& extraNonce = BinaryArray(), size_t maxOuts = 1) const;
 
   bool isFusionTransaction(const Transaction& transaction, uint32_t height) const;
   bool isFusionTransaction(const Transaction& transaction, size_t size, uint32_t height) const;
@@ -160,14 +164,13 @@ public:
   std::string formatAmount(int64_t amount) const;
   bool parseAmount(const std::string& str, uint64_t& amount) const;
 
-  uint64_t roundUpMinFee(uint64_t minimalFee, int digits) const;
-
   difficulty_type nextDifficulty(uint32_t height, uint8_t blockMajorVersion, std::vector<uint64_t> timestamps, std::vector<difficulty_type> Difficulties) const;
   difficulty_type nextDifficultyV1(std::vector<uint64_t> timestamps, std::vector<difficulty_type> Difficulties) const;
   difficulty_type nextDifficultyV2(std::vector<uint64_t> timestamps, std::vector<difficulty_type> Difficulties) const;
   difficulty_type nextDifficultyV3(std::vector<uint64_t> timestamps, std::vector<difficulty_type> Difficulties) const;  
   difficulty_type nextDifficultyV4(std::vector<uint64_t> timestamps, std::vector<difficulty_type> Difficulties) const;
   difficulty_type nextDifficultyV5(uint32_t height, uint8_t blockMajorVersion, std::vector<uint64_t> timestamps, std::vector<difficulty_type> Difficulties) const;
+  difficulty_type nextDifficultyV6(uint32_t height, uint8_t blockMajorVersion, std::vector<uint64_t> timestamps, std::vector<difficulty_type> Difficulties) const;
 
   bool checkProofOfWorkV1(Crypto::cn_context& context, const Block& block, difficulty_type currentDiffic, Crypto::Hash& proofOfWork) const;
   bool checkProofOfWorkV2(Crypto::cn_context& context, const Block& block, difficulty_type currentDiffic, Crypto::Hash& proofOfWork) const;
@@ -242,6 +245,7 @@ private:
   uint32_t m_upgradeHeightV3;
   uint32_t m_upgradeHeightV4;
   uint32_t m_upgradeHeightV5;
+  uint32_t m_upgradeHeightV6;
   unsigned int m_upgradeVotingThreshold;
   uint32_t m_upgradeVotingWindow;
   uint32_t m_upgradeWindow;
@@ -328,7 +332,7 @@ public:
   CurrencyBuilder& upgradeHeightV3(uint64_t val) { m_currency.m_upgradeHeightV3 = static_cast<uint32_t>(val); return *this; }
   CurrencyBuilder& upgradeHeightV4(uint64_t val) { m_currency.m_upgradeHeightV4 = static_cast<uint32_t>(val); return *this; }
   CurrencyBuilder& upgradeHeightV5(uint64_t val) { m_currency.m_upgradeHeightV5 = static_cast<uint32_t>(val); return *this; }
-
+  CurrencyBuilder& upgradeHeightV6(uint64_t val) { m_currency.m_upgradeHeightV6 = static_cast<uint32_t>(val); return *this; }
   CurrencyBuilder& upgradeVotingThreshold(unsigned int val);
   CurrencyBuilder& upgradeVotingWindow(size_t val) { m_currency.m_upgradeVotingWindow = static_cast<uint32_t>(val); return *this; }
   CurrencyBuilder& upgradeWindow(size_t val);

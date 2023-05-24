@@ -3,20 +3,20 @@
 // Copyright (c) 2016-2018, The Karbowanec developers
 // Copyright (c) 2018, The Pluracoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Currency.h"
 #include <cctype>
@@ -25,8 +25,8 @@
 #include <boost/lexical_cast.hpp>
 #include "../Common/Base58.h"
 #include "../Common/int-util.h"
+#include "../Common/FormatTools.h"
 #include "../Common/StringTools.h"
-
 #include "Account.h"
 #include "CryptoNoteBasicImpl.h"
 #include "CryptoNoteFormatUtils.h"
@@ -39,6 +39,7 @@
 using namespace Logging;
 using namespace Common;
 
+constexpr auto RESET_WORK_FACTOR_V6 = 1000;
 namespace CryptoNote {
 
 	const std::vector<uint64_t> Currency::PRETTY_AMOUNTS = {
@@ -76,10 +77,11 @@ namespace CryptoNote {
 		}
 
 		if (isTestnet()) {
-			m_upgradeHeightV2 = 1;
-			m_upgradeHeightV3 = 2;
-			m_upgradeHeightV4 = 4;
-		    m_upgradeHeightV5 = 6;
+			m_upgradeHeightV2 = 10;
+			m_upgradeHeightV3 = 60;
+			m_upgradeHeightV4 = 70;
+			m_upgradeHeightV5 = 80;
+			m_upgradeHeightV6 = 100;
 			m_blocksFileName = "testnet_" + m_blocksFileName;
 			m_blocksCacheFileName = "testnet_" + m_blocksCacheFileName;
 			m_blockIndexesFileName = "testnet_" + m_blockIndexesFileName;
@@ -131,22 +133,49 @@ namespace CryptoNote {
 	}
 
 	uint32_t Currency::upgradeHeight(uint8_t majorVersion) const {
-		if (majorVersion == BLOCK_MAJOR_VERSION_2) {
-			return m_upgradeHeightV2;
+		if (majorVersion == BLOCK_MAJOR_VERSION_6) {
+			return m_upgradeHeightV6;
 		}
-		else if (majorVersion == BLOCK_MAJOR_VERSION_3) {
-			return m_upgradeHeightV3;
+		else if (majorVersion == BLOCK_MAJOR_VERSION_5) {
+			return m_upgradeHeightV5;
 		}
 		else if (majorVersion == BLOCK_MAJOR_VERSION_4) {
 			return m_upgradeHeightV4;
 		}
-        else if (majorVersion == BLOCK_MAJOR_VERSION_5) {        	
-			return m_upgradeHeightV5;
+		else if (majorVersion == BLOCK_MAJOR_VERSION_3) {
+			return m_upgradeHeightV3;
 		}
+		if (majorVersion == BLOCK_MAJOR_VERSION_2) {            
+			return m_upgradeHeightV2;
+		}		
 		else {
 			return static_cast<uint32_t>(-1);
 		}
 	}
+
+    uint64_t Currency::calculateReward(uint64_t alreadyGeneratedCoins) const {
+        // assert(alreadyGeneratedCoins <= m_moneySupply);
+        assert(m_emissionSpeedFactor > 0 && m_emissionSpeedFactor <= 8 * sizeof(uint64_t));
+
+        uint64_t baseReward = (m_moneySupply - alreadyGeneratedCoins) >> m_emissionSpeedFactor;
+
+        // Tail emission
+        if (alreadyGeneratedCoins + CryptoNote::parameters::TAIL_EMISSION_REWARD >= m_moneySupply || baseReward < CryptoNote::parameters::TAIL_EMISSION_REWARD)
+        {
+          // flat rate tail emission reward,
+          // inflation slowly diminishing in relation to supply
+          //baseReward = CryptoNote::parameters::TAIL_EMISSION_REWARD;
+          // changed to
+          // Friedman's k-percent rule,
+          // inflation 2% of total coins in circulation per year
+          // according to Whitepaper v. 1, p. 16 (with change of 1% to 2%)
+          const uint64_t blocksInOneYear = expectedNumberOfBlocksPerDay() * 365;
+          uint64_t twoPercentOfEmission = static_cast<uint64_t>(static_cast<double>(alreadyGeneratedCoins) / 100.0 * 2.0);
+          baseReward = twoPercentOfEmission / blocksInOneYear;
+        }
+
+        return baseReward;
+      }
 
 	bool Currency::getBlockReward(uint8_t blockMajorVersion, size_t medianSize, size_t currentBlockSize, uint64_t alreadyGeneratedCoins, uint64_t fee, uint64_t& reward, int64_t& emissionChange, uint32_t height) const {
 
@@ -219,7 +248,7 @@ namespace CryptoNote {
 	}
 
 	bool Currency::constructMinerTx(uint8_t blockMajorVersion, uint32_t height, size_t medianSize, uint64_t alreadyGeneratedCoins, size_t currentBlockSize,
-		uint64_t fee, const AccountPublicAddress& minerAddress, Transaction& tx, const BinaryArray& extraNonce/* = BinaryArray()*/, size_t maxOuts/* = 1*/) const {
+		uint64_t fee, const AccountPublicAddress& minerAddress, Transaction& tx, Crypto::SecretKey& txKey, const BinaryArray& extraNonce/* = BinaryArray()*/, size_t maxOuts/* = 1*/) const {
 
 		tx.inputs.clear();
 		tx.outputs.clear();
@@ -294,7 +323,7 @@ namespace CryptoNote {
 
 		tx.version = CURRENT_TRANSACTION_VERSION;
 		//lock
-		tx.unlockTime = height + m_minedMoneyUnlockWindow;
+		tx.unlockTime = height + minedMoneyUnlockWindow();
 		tx.inputs.push_back(in);
 		return true;
 	}
@@ -401,97 +430,42 @@ namespace CryptoNote {
 	}
 
 	std::string Currency::formatAmount(uint64_t amount) const {
-		std::string s = std::to_string(amount);
-		if (s.size() < m_numberOfDecimalPlaces + 1) {
-			s.insert(0, m_numberOfDecimalPlaces + 1 - s.size(), '0');
-		}
-		s.insert(s.size() - m_numberOfDecimalPlaces, ".");
-		return s;
+		return Common::Format::formatAmount(amount);
 	}
 
 	std::string Currency::formatAmount(int64_t amount) const {
-		std::string s = formatAmount(static_cast<uint64_t>(std::abs(amount)));
-
-		if (amount < 0) {
-			s.insert(0, "-");
-		}
-
-		return s;
+    return Common::Format::formatAmount(amount);
 	}
 
 	bool Currency::parseAmount(const std::string& str, uint64_t& amount) const {
-		std::string strAmount = str;
-		boost::algorithm::trim(strAmount);
-
-		size_t pointIndex = strAmount.find_first_of('.');
-		size_t fractionSize;
-		if (std::string::npos != pointIndex) {
-			fractionSize = strAmount.size() - pointIndex - 1;
-			while (m_numberOfDecimalPlaces < fractionSize && '0' == strAmount.back()) {
-				strAmount.erase(strAmount.size() - 1, 1);
-				--fractionSize;
-			}
-			if (m_numberOfDecimalPlaces < fractionSize) {
-				return false;
-			}
-			strAmount.erase(pointIndex, 1);
-		}
-		else {
-			fractionSize = 0;
-		}
-
-		if (strAmount.empty()) {
-			return false;
-		}
-
-		if (!std::all_of(strAmount.begin(), strAmount.end(), ::isdigit)) {
-			return false;
-		}
-
-		if (fractionSize < m_numberOfDecimalPlaces) {
-			strAmount.append(m_numberOfDecimalPlaces - fractionSize, '0');
-		}
-
-		return Common::fromString(strAmount, amount);
+		return Common::Format::parseAmount(str, amount);
 	}
 
-	// Copyright (c) 2017-2018 Zawy 
-	// http://zawy1.blogspot.com/2017/12/using-difficulty-to-get-constant-value.html
-	// Moore's law application by Sergey Kozlov
-	uint64_t Currency::getMinimalFee(uint64_t dailyDifficulty, uint64_t reward, uint64_t avgHistoricalDifficulty, uint64_t medianHistoricalReward, uint32_t height) const {
-		const uint64_t blocksInTwoYears = CryptoNote::parameters::EXPECTED_NUMBER_OF_BLOCKS_PER_DAY * 365 * 2;
-		const double gauge = double(0.25);
-		uint64_t minimumFee(0);
-		double dailyDifficultyMoore = dailyDifficulty / pow(2, static_cast<double>(height) / static_cast<double>(blocksInTwoYears));
-		double minFee = gauge * CryptoNote::parameters::COIN * static_cast<double>(avgHistoricalDifficulty) 
-			/ dailyDifficultyMoore * static_cast<double>(reward)
-			/ static_cast<double>(medianHistoricalReward);
-		if (minFee == 0 || !std::isfinite(minFee))
-			return CryptoNote::parameters::MAXIMUM_FEE; // zero test 
-		minimumFee = static_cast<uint64_t>(minFee);
+  //todo - redesign this
+    uint64_t Currency::getMinimalFee(const uint32_t height) const {
+    if (height <= CryptoNote::parameters::UPGRADE_HEIGHT_V4)
+      return CryptoNote::parameters::MINIMUM_FEE_V1;
+    else {
+        return CryptoNote::parameters::MINIMUM_FEE_V2;
+    }
+  }
 
-		return std::min<uint64_t>(CryptoNote::parameters::MAXIMUM_FEE, minimumFee);
-	}
+  // All that exceeds 100 bytes is charged per byte,
+  // the cost of one byte is 1/100 of minimal fee
+  uint64_t Currency::getFeePerByte(const uint64_t txExtraSize, const uint64_t minFee) const {
+    return txExtraSize > 100 ? minFee / 100 * (txExtraSize - 100) : 0;
+  }
 
-	uint64_t Currency::roundUpMinFee(uint64_t minimalFee, int digits) const {
-		uint64_t ret(0);
-		std::string minFeeString = formatAmount(minimalFee);
-		double minFee = boost::lexical_cast<double>(minFeeString);
-		double scale = pow(10., floor(log10(fabs(minFee))) + (1 - digits));
-		double roundedFee = ceil(minFee / scale) * scale;
-		std::stringstream ss;
-		ss << std::fixed << std::setprecision(12) << roundedFee;
-		std::string roundedFeeString = ss.str();
-		parseAmount(roundedFeeString, ret);
-		return ret;
-	}
 
 	difficulty_type Currency::nextDifficulty(uint32_t height, uint8_t blockMajorVersion, std::vector<uint64_t> timestamps,
 		std::vector<difficulty_type> cumulativeDifficulties) const {
-		if (blockMajorVersion >= BLOCK_MAJOR_VERSION_5) {
+        if (blockMajorVersion >= BLOCK_MAJOR_VERSION_6) {
+			return nextDifficultyV6(height, blockMajorVersion, timestamps, cumulativeDifficulties);
+		}
+        else if (blockMajorVersion == BLOCK_MAJOR_VERSION_5) {
 			return nextDifficultyV5(height, blockMajorVersion, timestamps, cumulativeDifficulties);
 		}
-        else if (blockMajorVersion == BLOCK_MAJOR_VERSION_4) {
+		else if (blockMajorVersion == BLOCK_MAJOR_VERSION_4) {
 			return nextDifficultyV4(timestamps, cumulativeDifficulties);
 		}
 		else if (blockMajorVersion == BLOCK_MAJOR_VERSION_3) {
@@ -545,10 +519,12 @@ namespace CryptoNote {
 		uint64_t low, high;
 		low = mul128(totalWork, m_difficultyTarget, &high);
 		if (high != 0 || low + timeSpan - 1 < low) {
+            logger(Logging::INFO, BRIGHT_MAGENTA) << "Calculating next diff V1: 0";
 			return 0;
 		}
 
-		return (low + timeSpan - 1) / timeSpan;
+        logger(Logging::INFO, BRIGHT_MAGENTA) << "Calculating next diff V2: " << ((low + timeSpan - 1) / timeSpan);
+        return (low + timeSpan - 1) / timeSpan;
 	}
 
 	difficulty_type Currency::nextDifficultyV2(std::vector<uint64_t> timestamps,
@@ -597,9 +573,13 @@ namespace CryptoNote {
 		uint64_t nextDiffZ = low / timeSpan;
 
 		// minimum limit
-		if (nextDiffZ < 100000) {
+		if (!isTestnet() && nextDiffZ < 100000) {
 			nextDiffZ = 100000;
 		}
+
+        //if(isTestnet()) nextDiffZ = 5000;
+
+        logger(Logging::INFO, BRIGHT_MAGENTA) << "Calculating next diff V2: " << nextDiffZ;
 
 		return nextDiffZ;
 	}
@@ -657,9 +637,13 @@ namespace CryptoNote {
 		next_difficulty = static_cast<uint64_t>(nextDifficulty);
 		
 		// minimum limit
-		if (next_difficulty < 100000) {
-			next_difficulty = 100000;
+        if (next_difficulty < 100000) {
+            next_difficulty = 100000;
 		}
+
+        //if(isTestnet()) next_difficulty = 5000;
+
+        logger(Logging::INFO, BRIGHT_MAGENTA) << "Calculating next diff V3: " << next_difficulty;
 
 		return next_difficulty;
 	}
@@ -691,37 +675,39 @@ namespace CryptoNote {
 			return 1;
 
 		// To get an average solvetime to within +/- ~0.1%, use an adjustment factor.
-		const double_t adjust = 0.998;
+		const double adjust = 0.998;
 		// The divisor k normalizes LWMA.
-		const double_t k = N * (N + 1) / 2;
+		const double k = N * (N + 1) / 2.0f;
 
-		double_t LWMA(0), sum_inverse_D(0), harmonic_mean_D(0), nextDifficulty(0);
+		double LWMA(0), sum_inverse_D(0), harmonic_mean_D(0), nextDifficulty(0);
 		int64_t solveTime(0);
 		uint64_t difficulty(0), next_difficulty(0);
 
 		// Loop through N most recent blocks.
-		for (int64_t i = 1; i <= N; i++) {
+		for (size_t i = 1; i <= N; i++) {
 			solveTime = static_cast<int64_t>(timestamps[i]) - static_cast<int64_t>(timestamps[i - 1]);
 			solveTime = std::min<int64_t>((T * 7), std::max<int64_t>(solveTime, (-6 * T)));
 			difficulty = cumulativeDifficulties[i] - cumulativeDifficulties[i - 1];
-			LWMA += solveTime * i / k;
-			sum_inverse_D += 1 / static_cast<double_t>(difficulty);
+			LWMA += (int64_t)(solveTime * i) / k;
+			sum_inverse_D += 1 / static_cast<double>(difficulty);
 		}
 
 		// Keep LWMA sane in case something unforeseen occurs.
 		if (static_cast<int64_t>(boost::math::round(LWMA)) < T / 20)
-			LWMA = static_cast<double_t>(T / 20);
+			LWMA = static_cast<double>(T) / 20;
 
 		harmonic_mean_D = N / sum_inverse_D * adjust;
 		nextDifficulty = harmonic_mean_D * T / LWMA;
 		next_difficulty = static_cast<uint64_t>(nextDifficulty);
 		
 		// minimum limit
-		if (next_difficulty < 100000) {
+		if (!isTestnet() && next_difficulty < 100000) {
 			next_difficulty = 100000;
 		}
 
-		//logger(TRACE) << "Calculating next diff V4: " << next_difficulty;
+        //if(isTestnet()) next_difficulty = 5000;
+
+        logger(Logging::INFO, BRIGHT_MAGENTA) << "Calculating next diff V4: " << next_difficulty;
 
 		return next_difficulty;
 	}
@@ -753,7 +739,7 @@ namespace CryptoNote {
 		
 		for (int64_t i = 1; i <= N; i++) {
 			if (height < lwma3_height) { // LWMA-2								
-				ST = clamp(-6 * T, int64_t(timestamps[i]) - int64_t(timestamps[i - 1]), 6 * T);				
+				ST = clamp(-6 * T, int64_t(timestamps[i]) - int64_t(timestamps[i - 1]), 6 * T);
 			}
 			else { // LWMA-3				
 				if (static_cast<int64_t>(timestamps[i]) > prev_max_TS) {
@@ -774,7 +760,7 @@ namespace CryptoNote {
 		next_D = uint64_t((cumulativeDifficulties[N] - cumulativeDifficulties[0]) * T * (N + 1)) / uint64_t(2 * L);
 		next_D = (next_D * 99ull) / 100ull;
 
-		prev_D = cumulativeDifficulties[N] - cumulativeDifficulties[N - 1];				
+		prev_D = cumulativeDifficulties[N] - cumulativeDifficulties[N - 1];
 		next_D = clamp((uint64_t)(prev_D * 67ull / 100ull), next_D, (uint64_t)(prev_D * 150ull / 100ull));
 		if (sum_3_ST < (8 * T) / 10)
 		{
@@ -782,20 +768,93 @@ namespace CryptoNote {
 		}
 
 		// minimum limit
-		if (next_D < 100000) {
+		if (!isTestnet() && next_D < 100000) {
 			next_D = 100000;
-		}		
+		}
+
+        //if(isTestnet()) next_D = 5000;
+
+        logger(Logging::INFO, BRIGHT_MAGENTA) << "Calculating next diff V5: " << next_D;
 
 		return next_D;
 	}
+
+
+  difficulty_type Currency::nextDifficultyV6(uint32_t height, uint8_t blockMajorVersion,
+    std::vector<std::uint64_t> timestamps, std::vector<difficulty_type> cumulativeDifficulties) const {
+
+    // LWMA-1 difficulty algorithm 
+    // Copyright (c) 2017-2018 Zawy, MIT License
+    // See commented link below for required config file changes. Fix FTL and MTP.
+    // https://github.com/zawy12/difficulty-algorithms/issues/3
+
+    // begin reset difficulty for new epoch
+
+    height--; // there's difference between karbo1 and karbo2 here (height vs top block index)
+
+    if (height == upgradeHeight(CryptoNote::BLOCK_MAJOR_VERSION_6)) {        
+        uint64_t cd = cumulativeDifficulties[0] / height / RESET_WORK_FACTOR_V6;
+        logger(Logging::INFO, BRIGHT_MAGENTA) << "!!! HARDFORK V6 - custom forced diff: " << cd;
+        return cd;
+    }
+    uint32_t count = (uint32_t)difficultyBlocksCountByBlockVersion(blockMajorVersion) - 1;
+    if (height > upgradeHeight(CryptoNote::BLOCK_MAJOR_VERSION_6) && height < CryptoNote::parameters::UPGRADE_HEIGHT_V6 + count) {
+      uint32_t offset = count - (height - upgradeHeight(CryptoNote::BLOCK_MAJOR_VERSION_6));
+      timestamps.erase(timestamps.begin(), timestamps.begin() + offset);
+      cumulativeDifficulties.erase(cumulativeDifficulties.begin(), cumulativeDifficulties.begin() + offset);
+    }
+
+    // end reset difficulty for new epoch
+
+    assert(timestamps.size() == cumulativeDifficulties.size());
+
+    const int64_t T = static_cast<int64_t>(m_difficultyTarget);
+    uint64_t N = std::min<uint64_t>(difficultyBlocksCount6(), cumulativeDifficulties.size() - 1); // adjust for new epoch difficulty reset, N should be by 1 block smaller
+    uint64_t L(0), avg_D, next_D, i, this_timestamp(0), previous_timestamp(0);
+
+    previous_timestamp = timestamps[0] - T;
+    for (i = 1; i <= N; i++) {
+      // Safely prevent out-of-sequence timestamps
+      if (timestamps[i] > previous_timestamp) { this_timestamp = timestamps[i]; }
+      else { this_timestamp = previous_timestamp + 1; }
+      L += i * std::min<uint64_t>(6 * T, this_timestamp - previous_timestamp);
+      previous_timestamp = this_timestamp;
+    }
+    if (L < N * N * T / 20) { L = N * N * T / 20; }
+    avg_D = (cumulativeDifficulties[N] - cumulativeDifficulties[0]) / N;
+
+    // Prevent round off error for small D and overflow for large D.
+    if (avg_D > 2000000 * N * N * T) {
+      next_D = (avg_D / (200 * L)) * (N * (N + 1) * T * 99);
+    }
+    else { next_D = (avg_D * N * (N + 1) * T * 99) / (200 * L); }
+
+    // Optional. Make all insignificant digits zero for easy reading.
+    i = 1000000000;
+    while (i > 1) {
+      if (next_D > i * 100) { next_D = ((next_D + i / 2) / i) * i; break; }
+      else { i /= 10; }
+    }
+
+    // minimum limit
+    if (!isTestnet() && next_D < 100000) {
+      next_D = 100000;
+    }
+
+    //if(isTestnet()) next_D = 5000;
+
+    logger(Logging::INFO, BRIGHT_MAGENTA) << "Calculating next diff V6: " << next_D;
+
+    return next_D;
+  }
 
 	bool Currency::checkProofOfWorkV1(Crypto::cn_context& context, const Block& block, difficulty_type currentDiffic,
 		Crypto::Hash& proofOfWork) const {
 		if (BLOCK_MAJOR_VERSION_2 == block.majorVersion || BLOCK_MAJOR_VERSION_3 == block.majorVersion || BLOCK_MAJOR_VERSION_4 == block.majorVersion) {
 			return false;
-		}		
+		}
 
-		if (!get_block_longhash(context, block, proofOfWork)) {			
+		if (!get_block_longhash(context, block, proofOfWork)) {
 			return false;
 		}
 
@@ -847,8 +906,8 @@ namespace CryptoNote {
 		switch (block.majorVersion) {
 		case BLOCK_MAJOR_VERSION_1:
 		case BLOCK_MAJOR_VERSION_5:
+		case BLOCK_MAJOR_VERSION_6:
 			return checkProofOfWorkV1(context, block, currentDiffic, proofOfWork);
-
 		case BLOCK_MAJOR_VERSION_2:
 		case BLOCK_MAJOR_VERSION_3:
 		case BLOCK_MAJOR_VERSION_4:
@@ -937,7 +996,7 @@ namespace CryptoNote {
 		upgradeHeightV3(parameters::UPGRADE_HEIGHT_V3);
 		upgradeHeightV4(parameters::UPGRADE_HEIGHT_V4);
 		upgradeHeightV5(parameters::UPGRADE_HEIGHT_V5);
-
+		upgradeHeightV6(parameters::UPGRADE_HEIGHT_V6);
 		upgradeVotingThreshold(parameters::UPGRADE_VOTING_THRESHOLD);
 		upgradeVotingWindow(parameters::UPGRADE_VOTING_WINDOW);
 		upgradeWindow(parameters::UPGRADE_WINDOW);
@@ -953,8 +1012,9 @@ namespace CryptoNote {
 
 	Transaction CurrencyBuilder::generateGenesisTransaction() {
 		CryptoNote::Transaction tx;
+    		Crypto::SecretKey txKey;
 		CryptoNote::AccountPublicAddress ac = boost::value_initialized<CryptoNote::AccountPublicAddress>();
-		m_currency.constructMinerTx(1, 0, 0, 0, 0, 0, ac, tx); // zero fee in genesis
+		m_currency.constructMinerTx(1, 0, 0, 0, 0, 0, ac, tx, txKey); // zero fee in genesis
 		return tx;
 	}
 	CurrencyBuilder& CurrencyBuilder::emissionSpeedFactor(unsigned int val) {

@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "TransfersConsumer.h"
 
@@ -67,7 +67,7 @@ void findMyOutputs(
   auto txPublicKey = tx.getTransactionPublicKey();
   KeyDerivation derivation;
 
-  if (!generate_key_derivation( txPublicKey, viewSecretKey, derivation)) {
+  if (!generate_key_derivation(txPublicKey, viewSecretKey, derivation)) {
     return;
   }
 
@@ -132,7 +132,13 @@ ITransfersSubscription& TransfersConsumer::addSubscription(const AccountSubscrip
   if (res.get() == nullptr) {
     res.reset(new TransfersSubscription(m_currency, m_logger.getLogger(), subscription));
     m_spendKeys.insert(subscription.keys.address.spendPublicKey);
-    updateSyncStart();
+    if (m_subscriptions.size() == 1) {
+      m_syncStart = res->getSyncStart();
+    } else {
+      auto subStart = res->getSyncStart();
+      m_syncStart.height = std::min(m_syncStart.height, subStart.height);
+      m_syncStart.timestamp = std::min(m_syncStart.timestamp, subStart.timestamp);
+    }
   }
 
   return *res;
@@ -390,6 +396,15 @@ std::error_code TransfersConsumer::createTransfers(
   auto txHash = tx.getTransactionHash();
   std::vector<PublicKey> temp_keys;
   std::lock_guard<std::mutex> lk(seen_mutex);
+  if (account.spendSecretKey == NULL_SECRET_KEY) {
+    KeyPair deterministic_tx_keys;
+    bool spending = generateDeterministicTransactionKeys(tx.getTransactionInputsHash(), account.viewSecretKey, deterministic_tx_keys)
+      && deterministic_tx_keys.publicKey == txPubKey;
+
+    if (spending) {
+      m_logger(WARNING, BRIGHT_YELLOW) << "Spending in tx " << Common::podToHex(tx.getTransactionHash());
+    }
+  }
 
   for (auto idx : outputs) {
 
@@ -454,7 +469,7 @@ std::error_code TransfersConsumer::createTransfers(
         if (it == transactions_hash_seen.end()) {
           std::unordered_set<Crypto::PublicKey>::iterator key_it = public_keys_seen.find(key);
           if (key_it != public_keys_seen.end()) {
-			  m_logger(ERROR, BRIGHT_RED) << "Failed to process transaction " << Common::podToHex(txHash) << ": duplicate multisignature output key is found";
+            m_logger(ERROR, BRIGHT_RED) << "Failed to process transaction " << Common::podToHex(txHash) << ": duplicate multisignature output key is found";
             return std::error_code();
           }
           if (std::find(temp_keys.begin(), temp_keys.end(), key) != temp_keys.end()) {
@@ -543,17 +558,17 @@ void TransfersConsumer::processTransaction(const TransactionBlockInfo& blockInfo
 void TransfersConsumer::processOutputs(const TransactionBlockInfo& blockInfo, TransfersSubscription& sub, const ITransactionReader& tx,
   const std::vector<TransactionOutputInformationIn>& transfers, const std::vector<uint32_t>& globalIdxs, bool& contains, bool& updated) {
 
-  TransactionInformation subscribtionTxInfo;
-  contains = sub.getContainer().getTransactionInformation(tx.getTransactionHash(), subscribtionTxInfo);
+  TransactionInformation subscriptionTxInfo;
+  contains = sub.getContainer().getTransactionInformation(tx.getTransactionHash(), subscriptionTxInfo);
   updated = false;
 
   if (contains) {
-    if (subscribtionTxInfo.blockHeight == WALLET_UNCONFIRMED_TRANSACTION_HEIGHT && blockInfo.height != WALLET_UNCONFIRMED_TRANSACTION_HEIGHT) {
+    if (subscriptionTxInfo.blockHeight == WALLET_UNCONFIRMED_TRANSACTION_HEIGHT && blockInfo.height != WALLET_UNCONFIRMED_TRANSACTION_HEIGHT) {
       // pool->blockchain
       sub.markTransactionConfirmed(blockInfo, tx.getTransactionHash(), globalIdxs);
       updated = true;
     } else {
-      assert(subscribtionTxInfo.blockHeight == blockInfo.height);
+      assert(subscriptionTxInfo.blockHeight == blockInfo.height);
     }
   } else {
     updated = sub.addTransaction(blockInfo, tx, transfers);

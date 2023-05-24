@@ -1,27 +1,57 @@
 #include <stdio.h>
 #include <stdlib.h>
+#if HAVE_CONFIG_H
+#include "../config.h"
+#endif
+#ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
-#include <time.h>
+#endif
 #include <errno.h>
 #include "../qrencode.h"
 
-struct timeval tv;
-void timerStart(const char *str)
+#ifdef _MSC_VER
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+static LARGE_INTEGER startTime;
+static LARGE_INTEGER frequency = { .QuadPart = 0 };
+#else
+static struct timeval tv;
+#endif
+
+static void timerStart(const char *str)
 {
 	printf("%s: START\n", str);
+#ifdef _MSC_VER
+	(void) QueryPerformanceCounter(&startTime);
+#else
 	gettimeofday(&tv, NULL);
+#endif
 }
 
-void timerStop(void)
+static void timerStop(void)
 {
+#ifdef _MSC_VER
+	LARGE_INTEGER endTime, elapsed;
+	(void) QueryPerformanceCounter(&endTime);
+	if (frequency.QuadPart == 0) {
+		(void) QueryPerformanceFrequency(&frequency);
+	}
+
+	elapsed.QuadPart = endTime.QuadPart - startTime.QuadPart;
+	elapsed.QuadPart *= 1000;
+	elapsed.QuadPart /= frequency.QuadPart;
+
+	printf("STOP: %lld msec\n", elapsed.QuadPart);
+#else
 	struct timeval tc;
 
 	gettimeofday(&tc, NULL);
 	printf("STOP: %ld msec\n", (tc.tv_sec - tv.tv_sec) * 1000
 			+ (tc.tv_usec - tv.tv_usec) / 1000);
+#endif
 }
 
-void prof_ver1to10(void)
+static void prof_ver1to10(void)
 {
 	QRcode *code;
 	int i;
@@ -42,7 +72,7 @@ void prof_ver1to10(void)
 	timerStop();
 }
 
-void prof_ver31to40(void)
+static void prof_ver31to40(void)
 {
 	QRcode *code;
 	int i;
@@ -63,12 +93,10 @@ void prof_ver31to40(void)
 	timerStop();
 }
 
-int main(void)
+int main()
 {
 	prof_ver1to10();
 	prof_ver31to40();
-
-	QRcode_clearCache();
 
 	return 0;
 }

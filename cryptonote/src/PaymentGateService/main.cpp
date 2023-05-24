@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <iostream>
 #include <memory>
@@ -304,12 +304,6 @@ int main(int argc, char** argv) {
     Logging::LoggerRef(pg.getLogger(), "main")(Logging::INFO) << "walletd v" << PROJECT_VERSION_LONG;
 
     const auto& config = pg.getConfig();
-
-    if (config.gateConfiguration.generateNewContainer) {
-      System::Dispatcher d;
-      generateNewWallet(pg.getCurrency(), pg.getWalletConfig(), pg.getLogger(), d);
-      return 0;
-    }
 
     if (config.gateConfiguration.registerService) {
       return registerService();

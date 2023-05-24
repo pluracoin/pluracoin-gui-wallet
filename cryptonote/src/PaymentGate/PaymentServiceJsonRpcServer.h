@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -73,7 +73,9 @@ private:
 
   std::error_code handleSave(const Save::Request& request, Save::Response& response);
   std::error_code handleReset(const Reset::Request& request, Reset::Response& response);
+  std::error_code handleExport(const Export::Request& request, Export::Response& response);
   std::error_code handleCreateAddress(const CreateAddress::Request& request, CreateAddress::Response& response);
+  std::error_code handleCreateAddressList(const CreateAddressList::Request& request, CreateAddressList::Response& response);
   std::error_code handleDeleteAddress(const DeleteAddress::Request& request, DeleteAddress::Response& response);
   std::error_code handleGetSpendKeys(const GetSpendKeys::Request& request, GetSpendKeys::Response& response);
   std::error_code handleGetBalance(const GetBalance::Request& request, GetBalance::Response& response);
@@ -82,16 +84,23 @@ private:
   std::error_code handleGetTransactions(const GetTransactions::Request& request, GetTransactions::Response& response);
   std::error_code handleGetUnconfirmedTransactionHashes(const GetUnconfirmedTransactionHashes::Request& request, GetUnconfirmedTransactionHashes::Response& response);
   std::error_code handleGetTransaction(const GetTransaction::Request& request, GetTransaction::Response& response);
+  std::error_code handleGetTransactionSecretKey(const GetTransactionSecretKey::Request& request, GetTransactionSecretKey::Response& response);
+  std::error_code handleGetTransactionProof(const GetTransactionProof::Request& request, GetTransactionProof::Response& response);
   std::error_code handleSendTransaction(const SendTransaction::Request& request, SendTransaction::Response& response);
   std::error_code handleCreateDelayedTransaction(const CreateDelayedTransaction::Request& request, CreateDelayedTransaction::Response& response);
   std::error_code handleGetDelayedTransactionHashes(const GetDelayedTransactionHashes::Request& request, GetDelayedTransactionHashes::Response& response);
   std::error_code handleDeleteDelayedTransaction(const DeleteDelayedTransaction::Request& request, DeleteDelayedTransaction::Response& response);
   std::error_code handleSendDelayedTransaction(const SendDelayedTransaction::Request& request, SendDelayedTransaction::Response& response);
   std::error_code handleGetViewKey(const GetViewKey::Request& request, GetViewKey::Response& response);
+  std::error_code handleGetMnemonicSeed(const GetMnemonicSeed::Request& request, GetMnemonicSeed::Response& response);
   std::error_code handleGetStatus(const GetStatus::Request& request, GetStatus::Response& response);
   std::error_code handleGetAddresses(const GetAddresses::Request& request, GetAddresses::Response& response);
+  std::error_code handleGetAddressesCount(const GetAddressesCount::Request& request, GetAddressesCount::Response& response);
   std::error_code handleValidateAddress(const ValidateAddress::Request& request, ValidateAddress::Response& response);
 
+  std::error_code handleGetReserveProof(const GetReserveProof::Request& request, GetReserveProof::Response& response);
+  std::error_code handleSignMessage(const SignMessage::Request& request, SignMessage::Response& response);
+  std::error_code handleVerifyMessage(const VerifyMessage::Request& request, VerifyMessage::Response& response);
   std::error_code handleSendFusionTransaction(const SendFusionTransaction::Request& request, SendFusionTransaction::Response& response);
   std::error_code handleEstimateFusion(const EstimateFusion::Request& request, EstimateFusion::Response& response);
 };

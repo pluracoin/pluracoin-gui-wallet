@@ -10,11 +10,11 @@
     <x>0</x>
     <y>0</y>
     <width>474</width>
-    <height>90</height>
+    <height>96</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Confirm sending %1 PLURA</string>
+   <string>Confirm sending %1 KRB</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -22,7 +22,7 @@
      <item>
       <widget class="QLabel" name="m_confirmLabel">
        <property name="text">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Are you sure you want to send &lt;strong&gt;%1 PLURA&lt;/strong&gt;?&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Are you sure you want to send &lt;strong&gt;%1 KRB&lt;/strong&gt;?&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
        </property>
        <property name="textFormat">
         <enum>Qt::RichText</enum>
@@ -76,7 +76,7 @@
        </property>
        <property name="icon">
         <iconset resource="../../resources.qrc">
-         <normaloff>:/icons/transaction</normaloff>:/icons/transaction</iconset>
+         <normaloff>:/icons/check</normaloff>:/icons/check</iconset>
        </property>
       </widget>
      </item>

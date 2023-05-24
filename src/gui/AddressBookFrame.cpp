@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2015 The Cryptonote developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,6 +24,7 @@ AddressBookFrame::AddressBookFrame(QWidget* _parent) : QFrame(_parent), m_ui(new
   m_ui->m_addressBookView->header()->setSectionResizeMode(1, QHeaderView::Stretch);
   m_ui->m_addressBookView->setSortingEnabled(true);
   m_ui->m_addressBookView->sortByColumn(0, Qt::AscendingOrder);
+  m_ui->m_addressBookView->setRootIsDecorated(false);
 
   connect(m_ui->m_addressBookView->selectionModel(), &QItemSelectionModel::currentChanged, this, &AddressBookFrame::currentAddressChanged);
 

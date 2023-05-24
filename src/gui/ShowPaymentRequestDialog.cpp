@@ -1,4 +1,4 @@
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016 The Karbovanets developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -46,7 +46,7 @@ void ShowPaymentRequestDialog::saveUri() {
 void ShowPaymentRequestDialog::saveQRcodeToFile() {
   QString fileName = QFileDialog::getSaveFileName(&MainWindow::instance(), tr("New PNG file"), QDir::homePath(), "PNG (*.png)");
   if (!fileName.isEmpty()) {
-    QPixmap qrcode = QPixmap::grabWidget(m_ui->m_requestQRlabel);
+    QPixmap qrcode = m_ui->m_requestQRlabel->grab();
     QFile f(fileName);
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
       QByteArray ba;

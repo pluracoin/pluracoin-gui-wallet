@@ -1,20 +1,20 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 // Copyright (c) 2016-2018, The Karbowanec developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -52,6 +52,31 @@ std::string podToHex(const T& s) {
   return toHex(&s, sizeof(s));
 }
 
+bool starts_with(const std::string &str1, const std::string &str2);
+bool ends_with(const std::string &str1, const std::string &str2);
+
+inline bool split_string_helper(const std::string &str, size_t pos, const std::string &, std::string &head) {
+  head = str.substr(pos);
+  return true;
+}
+
+template<class... Parts>
+inline bool split_string_helper(const std::string &str,
+  size_t pos,
+  const std::string &separator,
+  std::string &head,
+  Parts &... parts) {
+  size_t pos2 = str.find(separator, pos);
+  if (pos2 == std::string::npos)
+    return false;
+  head = str.substr(pos, pos2 - pos);
+  return split_string_helper(str, pos2 + 1, separator, parts...);
+}
+
+template<class... Parts>
+inline bool split_string(const std::string &str, const std::string &separator, Parts &... parts) {
+  return split_string_helper(str, 0, separator, parts...);
+}
 std::string extract(std::string& text, char delimiter); // Does not throw
 std::string extract(const std::string& text, char delimiter, size_t& offset); // Does not throw
 

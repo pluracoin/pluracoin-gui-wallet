@@ -6,29 +6,21 @@
 	color: #41548D;
 }
 
-QTabBar {
-	background-color: #a8b6cb;
-}
-
 QMainWindow {
-        /*background:qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0	rgb(255, 255, 255) stop: 1.0 rgb(106, 199, 234)) url(":/images/bg.png") no-repeat bottom right;*/
-        background:qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0	rgb(255, 255, 255) stop: 1.0 rgb(209, 209, 209)) url(":/images/bg.png") no-repeat bottom right;
-        /*border-image: url(:/images/bg.png) 0 0 0 0 stretch stretch;*/
-        border-width: 0px;
+	background:qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0	rgb(255, 255, 255) stop: 1.0 rgb(156, 193, 239)) url(":/images/bg.png") no-repeat bottom left;
 }
 
 QDialog {
-        /*background:qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0	rgb(255, 255, 255) stop: 1.0 rgb(86, 204, 242));*/
-        background:qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0	rgb(255, 255, 255) stop: 1.0 rgb(209, 209, 209));
+	background:qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0	rgb(255, 255, 255) stop: 1.0 rgb(156, 193, 239));
 }
 
 QPushButton, QToolButton {
 	font-size: 12px;
 	line-height: 1.8;
-        border-radius: 4px;
+	border-radius: 2px;
 	padding: 2px 8px;
 	color: #fff;
-        background-color: #2E5766;
+	background-color: #6496c8;
 	border: none;
 	height: 26px;
 	selection-background-color: transparent;
@@ -71,7 +63,7 @@ QToolButton::focus:hover {
 
 QLineEdit {
 	border: 1px solid #6496c8;
-        border-radius: 4px;
+	border-radius: 2px;
 	padding: 2px 8px;
 	background: rgba(255,255,255,0.9);
 	selection-background-color: #6481AA;
@@ -80,7 +72,7 @@ QLineEdit {
 
 QTextEdit {
 	border: 1px solid #6496c8;
-        border-radius: 4px;
+	border-radius: 2px;
 	padding: 2px 8px;
 	background: rgba(255,255,255,0.9);
 	selection-background-color: #6481AA;
@@ -92,7 +84,7 @@ QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QTextEdi
 
 QSpinBox, QDoubleSpinBox, QComboBox {
 	border: 1px solid #6496c8;
-        border-radius: 4px;
+	border-radius: 2px;
 	padding: 2px 8px;
 	background: rgba(255,255,255,0.9);
 	height: 25px;
@@ -180,7 +172,7 @@ QSlider::groove:horizontal {
 		stop: 0.5 #20c000,
 		stop: 1 #20c000);
 	height: 5px;
-        border-radius: 4px;
+	border-radius: 2px;
 }
 
 QSlider::sub-page:horizontal {
@@ -188,14 +180,14 @@ QSlider::sub-page:horizontal {
 	background-image: url();
 	border: 1px solid #15315e;
 	height: 5px;
-        border-radius: 4px;
+	border-radius: 2px;
 }
 
 QSlider::add-page:horizontal {
 	background: #fff;
 	border: 1px solid #15315e;
 	height: 5px;
-        border-radius: 4px;
+	border-radius: 2px;
 }
 
 QSlider::handle:horizontal {
@@ -226,9 +218,8 @@ QWidget#scrollAreaWidgetContents {
 }
 
 QToolBar#accountToolBar { 
-	background-color: rgb(192, 192, 192);
-	border: 0;
-    min-height: 71px;
+	background-color: rgb(133, 167, 211);
+	border: 0; min-height: 71px;
 }
 
 QToolBar {
@@ -238,11 +229,11 @@ QToolBar {
 }
 
 QToolBar#toolBar {
-    background-color: rgba(5,24,44, 0.9);
-    width: 150px;
+	background-color: rgba(32, 55, 92, 0.9);
+	width: 150px; 
 	min-width: 150px; 
 	spacing: 0; 
-    padding: 0;
+	padding: 0; 
 	margin: 0;
 	border: 0;
 }
@@ -264,23 +255,36 @@ QToolBar#toolBar QToolButton{
 }
 
 QToolBar#toolBar QToolButton:pressed {
-        background-color: rgba(18, 94, 172, 0.7);
+	background-color: rgba(133, 167, 211, 0.5);
 }
 
 QToolBar#toolBar QToolButton:checked {
-        background-color: rgba(17, 123, 176, 0.4);
+	background-color: rgba(133, 167, 211, 0.6);
 }
 
 QToolBar#toolBar QToolButton:hover {
-        background-color: rgba(17, 123, 176, 0.7);
+	background-color: rgba(133, 167, 211, 0.1);
 }
 
 QToolBar#toolBar QToolButton::checked:hover {
-        background-color: rgba(17, 123, 176, 0.9);
+	background-color: rgba(133, 167, 211, 0.4);
 }
 
 QStatusBar#statusBar {
 	background-color: rgba(222, 234, 250, 0.7);
+}
+
+QProgressBar {
+  border: 1px solid transparent;
+  text-align: left;
+  color: #15315E;
+  background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1,
+                                    stop:0 rgba(167, 198, 217, 100),
+                                    stop:1 rgba(203, 222, 247, 100));
+}
+
+QProgressBar::chunk {
+  background-color: rgba(133, 167, 211, 100);
 }
 
 #m_accountFrame #m_addressEdit {
@@ -309,7 +313,6 @@ QToolTip{
 	color: #ffffff;
 	background-color: #233E69;
 	border: none;
-        border-radius: 3px;
 	padding: 4px;
 	opacity: 230;
 }

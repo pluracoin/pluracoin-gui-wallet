@@ -1,6 +1,6 @@
 // Copyright (c) 2011-2016 The Cryptonote developers
 // Copyright (c) 2015-2016 XDN developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016-2021 The Karbo developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,24 +13,32 @@
 #include <QVector>
 #include <QDebug>
 
-#include <crypto/crypto.h>
-#include <Common/Base58.h>
-#include <Common/Util.h>
-#include <Wallet/WalletErrors.h>
-#include <Wallet/LegacyKeysImporter.h>
-#include "CryptoNoteCore/CryptoNoteBasic.h"
+#include <boost/filesystem.hpp>
 
+#include "WalletAdapter.h"
+
+#include "CryptoNoteConfig.h"
+#include "crypto/crypto.h"
+#include "Common/Base58.h"
+#include "Common/Util.h"
+#include "Wallet/WalletErrors.h"
+#include "Wallet/LegacyKeysImporter.h"
+#include "CryptoNoteCore/CryptoNoteBasic.h"
+#include "ITransfersContainer.h"
 #include "NodeAdapter.h"
 #include "Settings.h"
-#include "WalletAdapter.h"
-#include "mnemonics/electrum-words.h"
+#include "Mnemonics/electrum-words.h"
 #include "gui/VerifyMnemonicSeedDialog.h"
+#include "CurrencyAdapter.h"
+#include "LoggerAdapter.h"
 
 extern "C"
 {
 #include "crypto/keccak.h"
 #include "crypto/crypto-ops.h"
 }
+
+#undef ERROR
 
 namespace WalletGui {
 
@@ -46,8 +54,10 @@ WalletAdapter& WalletAdapter::instance() {
 }
 
 WalletAdapter::WalletAdapter() : QObject(), m_wallet(nullptr), m_mutex(), m_isBackupInProgress(false),
-  m_isSynchronized(false), m_newTransactionsNotificationTimer(),
-  m_lastWalletTransactionId(std::numeric_limits<quint64>::max()) {
+  m_syncSpeed(0), m_syncPeriod(0), m_isSynchronized(false), m_newTransactionsNotificationTimer(),
+  m_lastWalletTransactionId(std::numeric_limits<quint64>::max()),
+  m_logger(LoggerAdapter::instance().getLoggerManager(), "WalletAdapter")
+{
   connect(this, &WalletAdapter::walletInitCompletedSignal, this, &WalletAdapter::onWalletInitCompleted, Qt::QueuedConnection);
   connect(this, &WalletAdapter::walletSendTransactionCompletedSignal, this, &WalletAdapter::onWalletSendTransactionCompleted, Qt::QueuedConnection);
   connect(this, &WalletAdapter::updateBlockStatusTextSignal, this, &WalletAdapter::updateBlockStatusText, Qt::QueuedConnection);
@@ -65,6 +75,24 @@ WalletAdapter::WalletAdapter() : QObject(), m_wallet(nullptr), m_mutex(), m_isBa
   }, Qt::QueuedConnection);
 
   m_newTransactionsNotificationTimer.setInterval(500);
+
+  // init wallet rpc config
+  bool no = false;
+  std::string dummy = "";
+  std::string wrpcBindIp = Settings::instance().getWalletRpcBindIp().toStdString();
+  uint16_t wrpcBindPort = static_cast<uint16_t>(Settings::instance().getWalletRpcBindPort());
+  uint16_t wrpcBindSslPort = CryptoNote::WALLET_RPC_DEFAULT_SSL_PORT;
+  std::string wrpcUser = Settings::instance().getWalletRpcUser().toStdString();
+  std::string wrpcPassword = Settings::instance().getWalletRpcPassword().toStdString();
+
+  m_wrpcOptions.insert(std::make_pair("rpc-bind-ip", boost::program_options::variable_value(wrpcBindIp, false)));
+  m_wrpcOptions.insert(std::make_pair("rpc-bind-port", boost::program_options::variable_value(wrpcBindPort, false)));
+  m_wrpcOptions.insert(std::make_pair("rpc-bind-ssl-port", boost::program_options::variable_value(wrpcBindSslPort, false)));
+  m_wrpcOptions.insert(std::make_pair("rpc-bind-ssl-enable", boost::program_options::variable_value(no, false)));
+  m_wrpcOptions.insert(std::make_pair("rpc-chain-file", boost::program_options::variable_value(dummy, false)));
+  m_wrpcOptions.insert(std::make_pair("rpc-key-file", boost::program_options::variable_value(dummy, false)));
+  m_wrpcOptions.insert(std::make_pair("rpc-user", boost::program_options::variable_value(wrpcUser, false)));
+  m_wrpcOptions.insert(std::make_pair("rpc-password", boost::program_options::variable_value(wrpcPassword, false)));
 }
 
 WalletAdapter::~WalletAdapter() {
@@ -74,32 +102,32 @@ QString WalletAdapter::getAddress() const {
   try {
     return m_wallet == nullptr ? QString() : QString::fromStdString(m_wallet->getAddress());
   } catch (std::system_error&) {
-    return QString();
   }
+  return QString();
 }
 
 quint64 WalletAdapter::getActualBalance() const {
   try {
     return m_wallet == nullptr ? 0 : m_wallet->actualBalance();
   } catch (std::system_error&) {
-    return 0;
   }
+  return 0;
 }
 
 quint64 WalletAdapter::getPendingBalance() const {
   try {
     return m_wallet == nullptr ? 0 : m_wallet->pendingBalance();
   } catch (std::system_error&) {
-    return 0;
   }
+  return 0;
 }
 
 quint64 WalletAdapter::getUnmixableBalance() const {
   try {
-    return m_wallet == nullptr ? 0 : m_wallet->dustBalance();
+    return m_wallet == nullptr ? 0 : m_wallet->unmixableBalance();
   } catch (std::system_error&) {
-    return 0;
   }
+  return 0;
 }
 
 void WalletAdapter::open(const QString& _password) {
@@ -134,6 +162,29 @@ void WalletAdapter::open(const QString& _password) {
   }
 }
 
+bool WalletAdapter::tryOpen(const QString& _password) {
+  Q_ASSERT(m_wallet != nullptr);
+  if (Settings::instance().getWalletFile().endsWith(".wallet")) {
+    if (openFile(Settings::instance().getWalletFile(), true)) {
+      try {
+        if (m_wallet->tryLoadWallet(m_file, _password.toStdString())) {
+          closeFile();
+          return true;
+        }
+        else {
+          closeFile();
+          return false;
+        }
+      }
+      catch (std::system_error&) {
+        closeFile();
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
 void WalletAdapter::createWallet() {
   Q_ASSERT(m_wallet == nullptr);
   Settings::instance().setEncrypted(false);
@@ -159,7 +210,7 @@ void WalletAdapter::createNonDeterministic() {
   m_wallet->addObserver(this);
   Settings::instance().setEncrypted(false);
   try {
-    m_wallet->initAndGenerate("");
+    m_wallet->initAndGenerateNonDeterministic("");
   } catch (std::system_error&) {
     delete m_wallet;
     m_wallet = nullptr;
@@ -174,6 +225,13 @@ void WalletAdapter::createWithKeys(const CryptoNote::AccountKeys& _keys) {
   m_wallet->initWithKeys(_keys, "");
 }
 
+void WalletAdapter::createWithKeys(const CryptoNote::AccountKeys& _keys, const quint32 _sync_heigth) {
+  m_wallet = NodeAdapter::instance().createWallet();
+  m_wallet->addObserver(this);
+  Settings::instance().setEncrypted(false);
+  Q_EMIT walletStateChangedSignal(tr("Importing keys"));
+  m_wallet->initWithKeys(_keys, "", _sync_heigth);
+}
 
 bool WalletAdapter::isOpen() const {
   return m_wallet != nullptr;
@@ -219,6 +277,13 @@ void WalletAdapter::close() {
   m_lastWalletTransactionId = std::numeric_limits<quint64>::max();
   Q_EMIT walletCloseCompletedSignal();
   QCoreApplication::processEvents();
+
+  if (m_wallet_rpc != nullptr) {
+    m_wallet_rpc->stop();
+    delete m_wallet_rpc;
+    m_wallet_rpc = nullptr;
+  }
+
   delete m_wallet;
   m_wallet = nullptr;
   unlock();
@@ -231,13 +296,13 @@ bool WalletAdapter::save(bool _details, bool _cache) {
 bool WalletAdapter::save(const QString& _file, bool _details, bool _cache) {
   Q_CHECK_PTR(m_wallet);
   if (openFile(_file, false)) {
+    Q_EMIT walletStateChangedSignal(tr("Saving data"));
     try {
       m_wallet->save(m_file, _details, _cache);
     } catch (std::system_error&) {
       closeFile();
       return false;
     }
-    Q_EMIT walletStateChangedSignal(tr("Saving data"));
   } else {
     return false;
   }
@@ -338,26 +403,126 @@ Crypto::SecretKey WalletAdapter::getTxKey(Crypto::Hash& txid) {
   return CryptoNote::NULL_SECRET_KEY;
 }
 
-void WalletAdapter::sendTransaction(const std::vector<CryptoNote::WalletLegacyTransfer>& _transfers, quint64 _fee, const QString& _paymentId, quint64 _mixin) {
+std::vector<CryptoNote::TransactionOutputInformation> WalletAdapter::getOutputs() {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    return m_wallet->getOutputs();
+  } catch (std::system_error&) {
+  }
+  return {};
+}
+
+std::vector<CryptoNote::TransactionOutputInformation> WalletAdapter::getLockedOutputs() {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    return m_wallet->getLockedOutputs();
+  } catch (std::system_error&) {
+  }
+  return {};
+}
+
+std::vector<CryptoNote::TransactionOutputInformation> WalletAdapter::getUnlockedOutputs() {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    return m_wallet->getLockedOutputs();
+  } catch (std::system_error&) {
+  }
+  return {};
+}
+
+std::vector<CryptoNote::TransactionSpentOutputInformation> WalletAdapter::getSpentOutputs() {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    return m_wallet->getSpentOutputs();
+  } catch (std::system_error&) {
+  }
+  return {};
+}
+
+void WalletAdapter::sendTransaction(const std::vector<CryptoNote::WalletLegacyTransfer>& _transfers, quint64 _fee, const QString& _payment_id, quint64 _mixin) {
   Q_CHECK_PTR(m_wallet);
   try {
     lock();
-    m_wallet->sendTransaction(_transfers, _fee, NodeAdapter::instance().convertPaymentId(_paymentId), _mixin, 0);
     Q_EMIT walletStateChangedSignal(tr("Sending transaction"));
+    m_wallet->sendTransaction(_transfers, _fee, NodeAdapter::instance().convertPaymentId(_payment_id), _mixin, 0);
   } catch (std::system_error&) {
     unlock();
   }
 }
 
-void WalletAdapter::sweepDust(const std::vector<CryptoNote::WalletLegacyTransfer>& _transfers, quint64 _fee, const QString& _paymentId, quint64 _mixin) {
+// Prerequisites: deduce fee from transfers, selected outs amount and tansfers amount + fee should match
+void WalletAdapter::sendTransaction(const std::vector<CryptoNote::WalletLegacyTransfer>& _transfers, const std::list<CryptoNote::TransactionOutputInformation>& _selectedOuts, quint64 _fee, const QString& _payment_id, quint64 _mixin) {
   Q_CHECK_PTR(m_wallet);
+
+  // can validate here that transfer amount + fee = selected outs amounts
+
   try {
     lock();
-    m_wallet->sendDustTransaction(_transfers, _fee, NodeAdapter::instance().convertPaymentId(_paymentId), _mixin, 0);
-    Q_EMIT walletStateChangedSignal(tr("Sweeping unmixable dust"));
+    Q_EMIT walletStateChangedSignal(tr("Sending transaction"));
+    m_wallet->sendTransaction(_transfers, _selectedOuts, _fee, NodeAdapter::instance().convertPaymentId(_payment_id), _mixin, 0);
   } catch (std::system_error&) {
     unlock();
   }
+}
+
+QString WalletAdapter::prepareRawTransaction(const std::vector<CryptoNote::WalletLegacyTransfer>& _transfers, quint64 _fee, const QString& _payment_id, quint64 _mixin) {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    lock();
+    Q_EMIT walletStateChangedSignal(tr("Preparing transaction"));
+    CryptoNote::TransactionId transactionId;
+    return QString::fromStdString(m_wallet->prepareRawTransaction(transactionId, _transfers, _fee, NodeAdapter::instance().convertPaymentId(_payment_id), _mixin, 0));
+  } catch (std::system_error&) {
+    unlock();
+  }
+  return QString();
+}
+
+QString WalletAdapter::prepareRawTransaction(const std::vector<CryptoNote::WalletLegacyTransfer>& _transfers, const std::list<CryptoNote::TransactionOutputInformation>& _selectedOuts, quint64 _fee, const QString& _payment_id, quint64 _mixin) {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    lock();
+    Q_EMIT walletStateChangedSignal(tr("Preparing transaction"));
+    CryptoNote::TransactionId transactionId;
+    return QString::fromStdString(m_wallet->prepareRawTransaction(transactionId, _transfers, _selectedOuts, _fee, NodeAdapter::instance().convertPaymentId(_payment_id), _mixin, 0));
+  } catch (std::system_error&) {
+    unlock();
+  }
+  return QString();
+}
+
+quint64 WalletAdapter::estimateFusion(quint64 _threshold) {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    return m_wallet->estimateFusion(_threshold);
+  } catch (std::system_error&) {
+  }
+  return 0;
+}
+
+std::list<CryptoNote::TransactionOutputInformation> WalletAdapter::getFusionTransfersToSend(quint64 _threshold, size_t _min_input_count, size_t _max_input_count) {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    return m_wallet->selectFusionTransfersToSend(_threshold, _min_input_count, _max_input_count);
+  } catch (std::system_error&) {
+  }
+  return {};
+}
+
+void WalletAdapter::sendFusionTransaction(const std::list<CryptoNote::TransactionOutputInformation>& _fusion_inputs, quint64 _fee, const QString& _extra, quint64 _mixin) {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    lock();
+    Q_EMIT walletStateChangedSignal(tr("Optimizing wallet"));
+    m_wallet->sendFusionTransaction(_fusion_inputs, _fee, _extra.toStdString(), _mixin, 0);
+  } catch (std::system_error&) {
+    unlock();
+  }
+}
+
+bool WalletAdapter::isFusionTransaction(const CryptoNote::WalletLegacyTransaction& walletTx) const {
+  Q_CHECK_PTR(m_wallet);
+  return m_wallet->isFusionTransaction(walletTx);
 }
 
 bool WalletAdapter::changePassword(const QString& _oldPassword, const QString& _newPassword) {
@@ -401,18 +566,45 @@ void WalletAdapter::initCompleted(std::error_code _error) {
   Q_EMIT walletInitCompletedSignal(_error.value(), QString::fromStdString(_error.message()));
 }
 
+void WalletAdapter::runWalletRpc() {
+  auto& dispatcher = NodeAdapter::instance().getDispatcher();
+  const std::string walletFilename = Settings::instance().getWalletFile().toStdString();
+  m_wallet_rpc = new Tools::wallet_rpc_server(/*dispatcher,*/
+                                              LoggerAdapter::instance().getLoggerManager(),
+                                              *m_wallet,
+                                              *NodeAdapter::instance().getNode(),
+                                              CurrencyAdapter::instance().getCurrency(),
+                                              walletFilename);
+  if (!m_wallet_rpc->init(m_wrpcOptions))
+    m_logger(Logging::ERROR) << "Failed to initialize wallet rpc server";
+  bool enable_ssl;
+  std::string bind_address, bind_address_ssl, ssl_info;
+  m_wallet_rpc->getServerConf(bind_address, bind_address_ssl, enable_ssl);
+  if (enable_ssl) ssl_info += std::string(", SSL on address ") + bind_address_ssl;
+    m_logger(Logging::INFO) << "Starting wallet rpc server on address " << bind_address << ssl_info;
+
+  m_wallet_rpc->run();
+}
+
 void WalletAdapter::onWalletInitCompleted(int _error, const QString& _errorText) {
   switch(_error) {
   case 0: {
     Q_EMIT walletActualBalanceUpdatedSignal(m_wallet->actualBalance());
     Q_EMIT walletPendingBalanceUpdatedSignal(m_wallet->pendingBalance());
-    //Q_EMIT walletUnmixableBalanceUpdatedSignal(m_wallet->dustBalance());
+    Q_EMIT walletUnmixableBalanceUpdatedSignal(m_wallet->unmixableBalance());
     Q_EMIT updateWalletAddressSignal(QString::fromStdString(m_wallet->getAddress()));
     Q_EMIT reloadWalletTransactionsSignal();
     Q_EMIT walletStateChangedSignal(tr("Ready"));
     QTimer::singleShot(5000, this, SLOT(updateBlockStatusText()));
     if (!QFile::exists(Settings::instance().getWalletFile())) {
       save(true, true);
+    }
+
+    if (Settings::instance().runWalletRpc()) {
+      auto& dispatcher = NodeAdapter::instance().getDispatcher();
+      System::ContextGroup contextGroup(dispatcher);
+      contextGroup.spawn(std::bind(&WalletAdapter::runWalletRpc, this));
+      contextGroup.wait();
     }
 
     break;
@@ -448,8 +640,59 @@ void WalletAdapter::saveCompleted(std::error_code _error) {
 }
 
 void WalletAdapter::synchronizationProgressUpdated(uint32_t _current, uint32_t _total) {
+  if (m_isSynchronized) {
+    m_syncSpeed = 0;
+    m_syncPeriod = 0;
+    m_perfData.clear();
+  }
   m_isSynchronized = false;
-  Q_EMIT walletStateChangedSignal(QString("%1 %2/%3").arg(tr("Synchronizing")).arg(_current).arg(_total));
+
+  if (NodeAdapter::instance().isOffline()) {
+    Q_EMIT walletStateChangedSignal(QString(tr("Offline")));
+    Q_EMIT walletSynchronizationProgressUpdatedSignal(_current, _total);
+    return;
+  }
+
+  const uint32_t speedCalcPeriod = 10;
+  const uint32_t periodDay = 60 * 60 * 24;
+  const uint32_t syncPeriodMax = std::numeric_limits<uint32_t>::max();
+  bool calcReady = false;
+  uint32_t totalDeltaTime = 0;
+  uint32_t totalDeltaHeight= 0;
+  uint32_t indexElements = m_perfData.empty() ? 0 : m_perfData.size() - 1;
+  for (uint32_t i = indexElements; i > 0; i--) {
+    totalDeltaTime += m_perfData[i - 1].time.secsTo(m_perfData[i].time);
+    totalDeltaHeight += m_perfData[i].height - m_perfData[i - 1].height;
+    if (totalDeltaTime >= speedCalcPeriod) {
+      m_perfData.erase(m_perfData.begin(), m_perfData.begin() + i - 1);
+      calcReady = true;
+      break;
+    }
+  }
+  if (calcReady && _total >= _current) {
+    m_syncSpeed = static_cast<uint32_t>(totalDeltaHeight / totalDeltaTime);
+    m_syncPeriod = m_syncSpeed > 0 ? static_cast<uint32_t>((_total - _current) / m_syncSpeed) : syncPeriodMax;
+  }
+  PerfType perfData = {_current, QTime::currentTime()};
+  m_perfData.push_back(std::move(perfData));
+  QString perfMess = "";
+  if (m_syncPeriod > 0) {
+    QDateTime leftTime = QDateTime::fromTime_t(m_syncPeriod).toUTC();
+    perfMess += "(";
+    perfMess += QString(tr("%n blocks per second", "", m_syncSpeed));
+    if (m_syncPeriod < syncPeriodMax) {
+      perfMess += " | ";
+      perfMess += QString(tr("est. completion in")) + " ";
+      if (m_syncPeriod >= periodDay) {
+        perfMess += QString(tr("%n day(s) and", "", static_cast<uint32_t>(m_syncPeriod / periodDay))) + " ";
+        perfMess += leftTime.toString("hh:mm");
+      } else {
+        perfMess += leftTime.toString("hh:mm:ss");
+      }
+    }
+    perfMess += ")";
+  }
+  Q_EMIT walletStateChangedSignal(QString("%1 %2/%3 %4").arg(tr("Synchronizing")).arg(_current).arg(_total).arg(perfMess));
   Q_EMIT walletSynchronizationProgressUpdatedSignal(_current, _total);
 }
 
@@ -550,7 +793,11 @@ void WalletAdapter::lock() {
 }
 
 void WalletAdapter::unlock() {
-  m_mutex.unlock();
+  if (m_mutex.try_lock()) {
+    m_mutex.unlock();
+  } else {
+    m_mutex.unlock();
+  }
 }
 
 bool WalletAdapter::openFile(const QString& _file, bool _readOnly) {
@@ -658,6 +905,65 @@ CryptoNote::AccountKeys WalletAdapter::getKeysFromMnemonicSeed(QString& _seed) c
   keccak((uint8_t *)&keys.spendSecretKey, sizeof(Crypto::SecretKey), (uint8_t *)&second, sizeof(Crypto::SecretKey));
   Crypto::generate_deterministic_keys(keys.address.viewPublicKey,keys.viewSecretKey,second);
   return keys;
+}
+
+QString WalletAdapter::getTxProof(Crypto::Hash& _txid, CryptoNote::AccountPublicAddress& _address, Crypto::SecretKey& _tx_key) {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    std::string sig_str;
+    m_wallet->getTxProof(_txid, _address, _tx_key, sig_str);
+    return QString::fromStdString(sig_str);
+  } catch (std::system_error&) {
+    QMessageBox::critical(nullptr, tr("Failed to get the transaction proof"), tr("Failed to get the transaction proof."), QMessageBox::Ok);
+    return QString();
+  }
+}
+
+QString WalletAdapter::getReserveProof(const quint64 &_reserve, const QString &_message) {
+  Q_CHECK_PTR(m_wallet);
+  if(Settings::instance().isTrackingMode()) {
+    QMessageBox::critical(nullptr, tr("Failed to get the reserve proof"), tr("This is tracking wallet. The reserve proof can be generated only by a full wallet."), QMessageBox::Ok);
+    return QString();
+  }
+  try {
+    uint64_t amount = 0;
+    if (_reserve == 0) {
+      amount = m_wallet->actualBalance();
+    } else {
+      amount = _reserve;
+    }
+    const std::string sig_str = m_wallet->getReserveProof(amount, (!_message.isEmpty() ? _message.toStdString() : ""));
+    return QString::fromStdString(sig_str);
+  } catch (std::system_error&) {
+    QMessageBox::critical(nullptr, tr("Failed to get the reserve proof"), tr("Failed to get the reserve proof."), QMessageBox::Ok);
+    return QString();
+  }
+}
+
+QString WalletAdapter::signMessage(const QString &data) {
+  Q_CHECK_PTR(m_wallet);
+  if(Settings::instance().isTrackingMode()) {
+    QMessageBox::critical(nullptr, tr("Failed to sign message"), tr("This is tracking wallet. The message can be signed only by a full wallet."), QMessageBox::Ok);
+    return QString();
+  }
+
+  std::string sig_str = m_wallet->sign_message(data.toStdString());
+  return QString::fromUtf8(sig_str.data(), sig_str.size());
+}
+
+bool WalletAdapter::verifyMessage(const QString &data, const CryptoNote::AccountPublicAddress &address, const QString &signature) {
+  Q_CHECK_PTR(m_wallet);
+
+  return m_wallet->verify_message(data.toStdString(), address, signature.toStdString());
+}
+
+size_t WalletAdapter::getUnlockedOutputsCount() {
+  Q_CHECK_PTR(m_wallet);
+  try {
+    return m_wallet->getUnlockedOutputsCount();
+  } catch (std::system_error&) {
+    return 0;
+  }
 }
 
 }

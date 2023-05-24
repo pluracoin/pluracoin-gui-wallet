@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -21,9 +21,12 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <parallel_hashmap/phmap.h>
 
 #include "crypto/hash.h"
 #include "CryptoNoteBasic.h"
+
+using phmap::flat_hash_map;
 
 namespace CryptoNote {
 
@@ -111,7 +114,8 @@ public:
     archive & lastGeneratedTxNumber;
   }
 private:
-  std::unordered_map<uint32_t, uint64_t> index;
+  flat_hash_map<uint32_t, uint64_t> index;
+
   uint64_t lastGeneratedTxNumber;
   bool enabled = false;
 };

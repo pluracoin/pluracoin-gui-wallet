@@ -1,19 +1,19 @@
 // Copyright (c) 2012-2016, The CryptoNote developers, The Bytecoin developers
 //
-// This file is part of Bytecoin.
+// This file is part of Plura.
 //
-// Bytecoin is free software: you can redistribute it and/or modify
+// Plura is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// Bytecoin is distributed in the hope that it will be useful,
+// Plura is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with Bytecoin.  If not, see <http://www.gnu.org/licenses/>.
+// along with Plura.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -56,7 +56,8 @@ enum WalletErrorCodes {
   BAD_PAYMENT_ID,
   BAD_TRANSACTION_EXTRA,
   MIXIN_COUNT_TOO_SMALL,
-  MIXIN_COUNT_TOO_LARGE
+  MIXIN_COUNT_TOO_LARGE,
+  WRONG_TX_SECRET_KEY
 };
 
 // custom category:
@@ -104,7 +105,8 @@ public:
     case BAD_PAYMENT_ID:                return "Wrong payment id format";
     case BAD_TRANSACTION_EXTRA:         return "Wrong transaction extra format";
     case MIXIN_COUNT_TOO_SMALL:         return "MixIn count is below the required minimum";
-	case MIXIN_COUNT_TOO_LARGE:         return "MixIn count is over the maximum allowed";
+    case MIXIN_COUNT_TOO_LARGE:         return "MixIn count is over the maximum allowed";
+    case WRONG_TX_SECRET_KEY:           return "Wrong transaction secret key";
     default:                            return "Unknown error";
     }
   }
@@ -119,11 +121,5 @@ private:
 
 inline std::error_code make_error_code(CryptoNote::error::WalletErrorCodes e) {
   return std::error_code(static_cast<int>(e), CryptoNote::error::WalletErrorCategory::INSTANCE);
-}
-
-namespace std {
-
-template <>
-struct is_error_code_enum<CryptoNote::error::WalletErrorCodes>: public true_type {};
 
 }

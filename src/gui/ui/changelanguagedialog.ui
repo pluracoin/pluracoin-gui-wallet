@@ -29,7 +29,27 @@
         <property name="text">
          <string>English</string>
         </property>
-       </item>       
+       </item>
+       <item>
+        <property name="text">
+         <string>Українська</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Русский</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Polski</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Беларуская</string>
+        </property>
+       </item>
        <item>
         <property name="text">
          <string>Deutsch</string>

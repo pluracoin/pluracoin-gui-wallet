@@ -1,19 +1,22 @@
 // Copyright (c) 2011-2015 The Cryptonote developers
 // Copyright (c) 2015-2016 XDN developers
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2016-2022 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextCodec>
+#include <QUrl>
 #include <Common/Util.h>
 #include "CommandLineParser.h"
 #include "CurrencyAdapter.h"
+#include "CryptoNoteWalletConfig.h"
 #include "Settings.h"
 
 namespace WalletGui {
@@ -22,11 +25,36 @@ Q_DECL_CONSTEXPR char OPTION_WALLET_FILE[] = "walletFile";
 Q_DECL_CONSTEXPR char OPTION_ENCRYPTED[] = "encrypted";
 Q_DECL_CONSTEXPR char OPTION_LANGUAGE[] = "Language";
 Q_DECL_CONSTEXPR char OPTION_CONNECTION[] = "connectionMode";
+Q_DECL_CONSTEXPR char OPTION_CONNECTIONS[] = "connectionsCount";
 Q_DECL_CONSTEXPR char OPTION_RPCNODES[] = "remoteNodes";
 Q_DECL_CONSTEXPR char OPTION_DAEMON_PORT[] = "daemonPort";
 Q_DECL_CONSTEXPR char OPTION_REMOTE_NODE[] = "remoteNode";
-Q_DECL_CONSTEXPR char OPTION_CURRENT_POOL[] = "currentPool";
 const char OPTION_WALLET_THEME[] = "theme";
+
+const char OPTION_WALLET_OPTIMIZATION[] = "optimization";
+const char OPTION_WALLET_OPTIMIZATION_ENABLED[] = "enabled";
+const char OPTION_WALLET_OPTIMIZATION_TIME_SET_MANUALLY[] = "useCustomTime";
+const char OPTION_WALLET_OPTIMIZATION_START_TIME[] = "startTime";
+const char OPTION_WALLET_OPTIMIZATION_STOP_TIME[] = "stopTime";
+const char OPTION_WALLET_OPTIMIZATION_INTERVAL[] = "interval";
+const char OPTION_WALLET_OPTIMIZATION_THRESHOLD[] = "target";
+const char OPTION_WALLET_OPTIMIZATION_MIXIN[] = "mixin";
+const quint64 DEFAULT_OPTIMIZATION_PERIOD = 1000 * 60 * 30; // 30 minutes
+const quint64 DEFAULT_OPTIMIZATION_THRESHOLD = 10000000000000;
+const quint64 DEFAULT_OPTIMIZATION_MIXIN = 3;
+const char OPTION_SKIP_WALLET_OPTIMIZATION_TRANSACTIONS[] = "skipFusionTransactions";
+const char LOCALHOST[] = "127.0.0.1";
+const char OPTION_WALLET_RPC[] = "WalletRpc";
+const char OPTION_WALLET_RPC_ENABLED[] = "enabled";
+const char OPTION_WALLET_RPC_BIND_IP[] = "walletRpcBindIp";
+const char OPTION_WALLET_RPC_BIND_PORT[] = "walletRpcBindPort";
+const char OPTION_WALLET_RPC_USER[] = "walletRpcUser";
+const char OPTION_WALLET_RPC_PASSWORD[] = "walletRpcPassword";
+
+const QVector<NodeSetting> DEFAULT_NODES_LIST = {
+  {"community.pluracoin.org", 19201, "/", false},
+  {"node1.pluracoin.org", 19201, "/", false}
+};
 
 Settings& Settings::instance() {
   static Settings inst;
@@ -56,51 +84,15 @@ void Settings::load() {
       m_addressBookFile.replace(m_addressBookFile.lastIndexOf(".wallet"), 7, ".addressbook");
     }
 
-    if (!m_settings.contains(OPTION_LANGUAGE)) {
-         m_currentLang = "uk";
-    }
-
-    if (!m_settings.contains(OPTION_CONNECTION)) {
-         //m_connectionMode = "auto";
-        m_connectionMode = "remote";
-
-    }
-
-    if (!m_settings.contains(OPTION_DAEMON_PORT)) {
-         m_daemonPort = CryptoNote::RPC_DEFAULT_PORT;
-    }
-
   } else {
     m_addressBookFile = getDataDir().absoluteFilePath(QCoreApplication::applicationName() + ".addressbook");
   }
 
-  if (m_settings.contains(OPTION_LANGUAGE)) {
-        m_currentLang = m_settings.value(OPTION_LANGUAGE).toString();
-  }
+  QVector<NodeSetting> nodesList = getRpcNodesList();
 
-  if (m_settings.contains(OPTION_CONNECTION)) {
-        m_connectionMode = m_settings.value(OPTION_CONNECTION).toString();
-  }
-
-  if (!m_settings.contains(OPTION_DAEMON_PORT)) {
-        m_settings.insert(OPTION_DAEMON_PORT, CryptoNote::RPC_DEFAULT_PORT); // default daemon port
-  }
-
-  if (!m_settings.contains("tracking")) {
-       m_settings.insert("tracking", false);
-  }
-
-  QStringList defaultNodesList;
-  defaultNodesList << "community.pluracoin.org:19201" << "node1.pluracoin.org:19201";
-  if (!m_settings.contains(OPTION_RPCNODES)) {
-    setRpcNodesList(QStringList() << defaultNodesList);
+  if (!m_settings.contains(OPTION_RPCNODES) || nodesList.isEmpty()) {
+    setRpcNodesList(DEFAULT_NODES_LIST);
   } else {
-    QStringList nodesList = getRpcNodesList();
-    Q_FOREACH (const QString& node, defaultNodesList) {
-      if (!nodesList.contains(node)) {
-        nodesList << node;
-      }
-    }
     setRpcNodesList(nodesList);
   }
 
@@ -118,6 +110,16 @@ void Settings::load() {
 bool Settings::isTestnet() const {
   Q_ASSERT(m_cmdLineParser != nullptr);
   return m_cmdLineParser->hasTestnetOption();
+}
+
+bool Settings::withoutCheckpoints() const {
+  Q_ASSERT(m_cmdLineParser != nullptr);
+  return m_cmdLineParser->hasWithoutCheckpointsOption();
+}
+
+bool Settings::alowReorg() const {
+  Q_ASSERT(m_cmdLineParser != nullptr);
+  return m_cmdLineParser->hasAllowReorgOption();
 }
 
 bool Settings::hasAllowLocalIpOption() const {
@@ -140,9 +142,37 @@ quint16 Settings::getP2pBindPort() const {
   return m_cmdLineParser->getP2pBindPort();
 }
 
+QString Settings::getRpcBindIp() const {
+  Q_ASSERT(m_cmdLineParser != nullptr);
+  return m_cmdLineParser->getRpcBindIp();
+}
+
+quint16 Settings::getRpcBindPort() const {
+  Q_ASSERT(m_cmdLineParser != nullptr);
+  return m_cmdLineParser->getRpcBindPort();
+}
+
+bool Settings::hasRunRpc() const {
+  Q_ASSERT(m_cmdLineParser != nullptr);
+  return m_cmdLineParser->hasRpcOption();
+}
+
+bool Settings::hasRestrictedRpc() const {
+  Q_ASSERT(m_cmdLineParser != nullptr);
+  return m_cmdLineParser->hasRestrictedRpcOption();
+}
+
 quint16 Settings::getP2pExternalPort() const {
   Q_ASSERT(m_cmdLineParser != nullptr);
   return m_cmdLineParser->getP2pExternalPort();
+}
+
+quint16 Settings::getConnectionsCount() const {
+  if (m_settings.contains(OPTION_CONNECTIONS)) {
+    return m_settings.value(OPTION_CONNECTIONS).toVariant().toInt();
+  }
+
+  return CryptoNote::P2P_DEFAULT_CONNECTIONS_COUNT;
 }
 
 QStringList Settings::getPeers() const {
@@ -170,9 +200,19 @@ QDir Settings::getDataDir() const {
   return QDir(m_cmdLineParser->getDataDir());
 }
 
+quint32 Settings::getRollBack() const {
+  Q_CHECK_PTR(m_cmdLineParser);
+  return m_cmdLineParser->rollBack();
+}
+
 QString Settings::getWalletFile() const {
   return m_settings.contains("walletFile") ? m_settings.value("walletFile").toString() :
-    getDataDir().absoluteFilePath(QCoreApplication::applicationName() + ".wallet");
+    ""; //getDataDir().absoluteFilePath(QCoreApplication::applicationName() + ".wallet");
+}
+
+QString Settings::getWalletName() const {
+  QFileInfo fi(getWalletFile());
+  return fi.fileName();
 }
 
 QStringList Settings::getRecentWalletsList() const {
@@ -196,7 +236,7 @@ bool Settings::isTrackingMode() const {
 }
 
 QString Settings::getVersion() const {
-  return VERSION;
+  return WALLET_VERSION;
 }
 
 QString Settings::getCurrentTheme() const {
@@ -204,59 +244,83 @@ QString Settings::getCurrentTheme() const {
 }
 
 QString Settings::getLanguage() const {
-    QString currentLang;
-    if (m_settings.contains(OPTION_LANGUAGE)) {
-        currentLang = m_settings.value(OPTION_LANGUAGE).toString();
-    }
-    return currentLang;
+  QString currentLang; // default should be empty, in order system's will be used
+  if (m_settings.contains(OPTION_LANGUAGE)) {
+    currentLang = m_settings.value(OPTION_LANGUAGE).toString();
+  }
+
+  return currentLang;
 }
 
 QString Settings::getConnection() const {
-    QString connection;
-    if (m_settings.contains(OPTION_CONNECTION)) {
-        connection = m_settings.value(OPTION_CONNECTION).toString();
-    }
-    else {
-    //connection = "auto"; // default
-    connection = "remote"; // default
-    }
-    return connection;
+  QString connection = "remote"; // default
+  if (m_settings.contains(OPTION_CONNECTION)) {
+    connection = m_settings.value(OPTION_CONNECTION).toString();
+  }
+
+  return connection;
 }
 
-QStringList Settings::getRpcNodesList() const {
-  QStringList res;
+QVector<NodeSetting> Settings::getRpcNodesList() const {
+  QVector<NodeSetting> res;
   if (m_settings.contains(OPTION_RPCNODES)) {
-    res << m_settings.value(OPTION_RPCNODES).toVariant().toStringList();
+    const QJsonArray nodeSettingArray(m_settings.value(OPTION_RPCNODES).toArray());
+    for (const QJsonValue nodeSettingValue : nodeSettingArray) {
+      const QJsonObject nodeSettingObj = nodeSettingValue.toObject();
+      NodeSetting nodeSetting;
+      if (nodeSettingObj.contains("host") &&
+          nodeSettingObj.contains("port") &&
+          nodeSettingObj.contains("path") &&
+          nodeSettingObj.contains("ssl")) {
+          nodeSetting.host = nodeSettingObj.value("host").toString();
+          nodeSetting.port = nodeSettingObj.value("port").toInt();
+          nodeSetting.path = nodeSettingObj.value("path").toString();
+          nodeSetting.ssl  = nodeSettingObj.value("ssl").toBool();
+      } else {
+         // convert old format
+         QUrl remoteNodeUrl = QUrl::fromUserInput(nodeSettingValue.toString());
+         nodeSetting.host = remoteNodeUrl.host();
+         nodeSetting.port = remoteNodeUrl.port();
+         nodeSetting.path = "/";
+         nodeSetting.ssl  = false;
+      }
+      res.append(nodeSetting);
+    }
   }
 
   return res;
 }
 
 quint16 Settings::getCurrentLocalDaemonPort() const {
-    quint16 port;
-    if (m_settings.contains(OPTION_DAEMON_PORT)) {
-        port = m_settings.value(OPTION_DAEMON_PORT).toVariant().toInt();
-    }
-    return port;
-}
-
-QString Settings::getCurrentRemoteNode() const {
-    QString remotenode;
-    if (m_settings.contains(OPTION_REMOTE_NODE)) {
-        remotenode = m_settings.value(OPTION_REMOTE_NODE).toString();
-      }
-    else {
-      remotenode = "community.pluracoin.org:19201";
-    }
-    return remotenode;
-}
-
-QString Settings::getCurrentPool() const {
-  QString pool;
-  if (m_settings.contains(OPTION_CURRENT_POOL)) {
-    pool = m_settings.value(OPTION_CURRENT_POOL).toString();
+  if (m_settings.contains(OPTION_DAEMON_PORT)) {
+    return m_settings.value(OPTION_DAEMON_PORT).toVariant().toInt();
   }
-  return pool;
+
+  return CryptoNote::RPC_DEFAULT_PORT;
+}
+
+NodeSetting Settings::getCurrentRemoteNode() const {
+  NodeSetting remotenode;
+  if (m_settings.contains(OPTION_REMOTE_NODE)) {
+    const QJsonObject nodeSettingObj = m_settings.value(OPTION_REMOTE_NODE).toObject();
+    remotenode.host = nodeSettingObj.value("host").toString();
+    remotenode.port = nodeSettingObj.value("port").toInt();
+    remotenode.path = nodeSettingObj.value("path").toString();
+    remotenode.ssl = nodeSettingObj.value("ssl").toBool();
+  }
+  return remotenode;
+}
+
+quint16 Settings::getMiningThreads() const {
+  if (m_settings.contains("miningThreads")) {
+    return m_settings.value("miningThreads").toVariant().toInt();
+  } else {
+    return 0;
+  }
+}
+
+bool Settings::isMiningOnLaunchEnabled() const {
+  return m_settings.contains("autostartMininig") ? m_settings.value("autostartMininig").toBool() : false;
 }
 
 bool Settings::isStartOnLoginEnabled() const {
@@ -305,6 +369,166 @@ bool Settings::isCloseToTrayEnabled() const {
   return m_settings.contains("closeToTray") ? m_settings.value("closeToTray").toBool() : false;
 }
 #endif
+
+bool Settings::isOptimizationEnabled() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return false;
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  return optimizationObject.contains(OPTION_WALLET_OPTIMIZATION_ENABLED) ? optimizationObject.value(OPTION_WALLET_OPTIMIZATION_ENABLED).toBool() : false;
+}
+
+bool Settings::isOptimizationTimeSetManually() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return false;
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  if (!optimizationObject.contains(OPTION_WALLET_OPTIMIZATION_TIME_SET_MANUALLY)) {
+    return false;
+  }
+
+  return optimizationObject.value(OPTION_WALLET_OPTIMIZATION_TIME_SET_MANUALLY).toBool();
+}
+
+QTime Settings::getOptimizationStartTime() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return QTime(0, 0);
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  if (!optimizationObject.contains(OPTION_WALLET_OPTIMIZATION_START_TIME)) {
+    return QTime(0, 0);
+  }
+
+  QString timeString = optimizationObject.value(OPTION_WALLET_OPTIMIZATION_START_TIME).toString();
+  return QTime::fromString(timeString, Qt::ISODate);
+}
+
+QTime Settings::getOptimizationStopTime() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return QTime(0, 0);
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  if (!optimizationObject.contains(OPTION_WALLET_OPTIMIZATION_STOP_TIME)) {
+    return QTime(0, 0);
+  }
+
+  QString timeString = optimizationObject.value(OPTION_WALLET_OPTIMIZATION_STOP_TIME).toString();
+  return QTime::fromString(timeString, Qt::ISODate);
+}
+
+quint64 Settings::getOptimizationInterval() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return DEFAULT_OPTIMIZATION_PERIOD;
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  if (!optimizationObject.contains(OPTION_WALLET_OPTIMIZATION_INTERVAL)) {
+    return DEFAULT_OPTIMIZATION_PERIOD;
+  }
+
+  return optimizationObject.value(OPTION_WALLET_OPTIMIZATION_INTERVAL).toString().toULongLong();
+}
+
+quint64 Settings::getOptimizationThreshold() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return DEFAULT_OPTIMIZATION_THRESHOLD;
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  if (!optimizationObject.contains(OPTION_WALLET_OPTIMIZATION_THRESHOLD)) {
+    return DEFAULT_OPTIMIZATION_THRESHOLD;
+  }
+
+  return optimizationObject.value(OPTION_WALLET_OPTIMIZATION_THRESHOLD).toString().toULongLong();
+}
+
+quint64 Settings::getOptimizationMixin() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return DEFAULT_OPTIMIZATION_MIXIN;
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  if (!optimizationObject.contains(OPTION_WALLET_OPTIMIZATION_MIXIN)) {
+    return DEFAULT_OPTIMIZATION_MIXIN;
+  }
+
+  return optimizationObject.value(OPTION_WALLET_OPTIMIZATION_MIXIN).toString().toULongLong();
+}
+
+bool Settings::skipFusionTransactions() const {
+  if (!m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+    return false;
+  }
+
+  QJsonObject optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+  return optimizationObject.contains(OPTION_SKIP_WALLET_OPTIMIZATION_TRANSACTIONS) ? optimizationObject.value(OPTION_SKIP_WALLET_OPTIMIZATION_TRANSACTIONS).toBool() : false;
+}
+
+bool Settings::hideEverythingOnLocked() const {
+  return m_settings.contains("hideEverythingOnLocked") ? m_settings.value("hideEverythingOnLocked").toBool() : false;
+}
+
+bool Settings::runWalletRpc() const {
+  if (!m_settings.contains(OPTION_WALLET_RPC)) {
+    return false;
+  }
+
+  QJsonObject walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+  return walletRpcObject.contains(OPTION_WALLET_RPC_ENABLED) ? walletRpcObject.value(OPTION_WALLET_RPC_ENABLED).toBool() : false;
+}
+
+QString Settings::getWalletRpcBindIp() const {
+  if (m_settings.contains(OPTION_WALLET_RPC)) {
+     QJsonObject walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+     if (walletRpcObject.contains(OPTION_WALLET_RPC_BIND_IP)) {
+       return walletRpcObject.value(OPTION_WALLET_RPC_BIND_IP).toString();
+     }
+  }
+
+  return LOCALHOST;
+}
+
+quint16 Settings::getWalletRpcBindPort() const {
+  if (m_settings.contains(OPTION_WALLET_RPC)) {
+    QJsonObject walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    if (walletRpcObject.contains(OPTION_WALLET_RPC_BIND_PORT)) {
+      return walletRpcObject.value(OPTION_WALLET_RPC_BIND_PORT).toVariant().toInt();
+    }
+  }
+
+  return CryptoNote::WALLET_RPC_DEFAULT_PORT;
+}
+
+QString Settings::getWalletRpcUser() const {
+  QString walletRpcUser = "";
+
+  if (m_settings.contains(OPTION_WALLET_RPC)) {
+    QJsonObject walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    if (walletRpcObject.contains(OPTION_WALLET_RPC_USER)) {
+       walletRpcUser = walletRpcObject.value(OPTION_WALLET_RPC_USER).toString();
+    }
+  }
+
+  return walletRpcUser;
+}
+
+QString Settings::getWalletRpcPassword() const {
+  QString walletRpcPassword = "";
+
+  if (m_settings.contains(OPTION_WALLET_RPC)) {
+    QJsonObject walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    if (walletRpcObject.contains(OPTION_WALLET_RPC_PASSWORD)) {
+       walletRpcPassword = walletRpcObject.value(OPTION_WALLET_RPC_PASSWORD).toString();
+    }
+  }
+
+  return walletRpcPassword;
+}
+
 
 void Settings::setWalletFile(const QString& _file) {
   if (_file.endsWith(".wallet") || _file.endsWith(".keys")) {
@@ -359,6 +583,13 @@ void Settings::setEncrypted(bool _encrypted) {
 void Settings::setTrackingMode(bool _tracking) {
   if (isTrackingMode() != _tracking) {
     m_settings.insert("tracking", _tracking);
+    saveSettings();
+  }
+}
+
+void Settings::setMiningOnLaunchEnabled(bool _automining) {
+  if (isMiningOnLaunchEnabled() != _automining) {
+    m_settings.insert("autostartMininig", _automining);
     saveSettings();
   }
 }
@@ -432,21 +663,47 @@ void Settings::setConnection(const QString& _connection) {
     saveSettings();
 }
 
+void Settings::setConnectionsCount(const quint16& _count) {
+  m_settings.insert(OPTION_CONNECTIONS, _count);
+  saveSettings();
+}
+
 void Settings::setCurrentLocalDaemonPort(const quint16& _daemonPort) {
     m_settings.insert(OPTION_DAEMON_PORT, _daemonPort);
     saveSettings();
 }
 
-void Settings::setCurrentRemoteNode(const QString& _remoteNode) {
-    if (!_remoteNode.isEmpty()) {
-    m_settings.insert(OPTION_REMOTE_NODE, _remoteNode);
-    }
-    saveSettings();
+void Settings::setCurrentRemoteNode(const NodeSetting &remoteNode) {
+  if (!remoteNode.host.isEmpty()) {
+    QJsonObject nodeSettingObj;
+    nodeSettingObj.insert("host", QJsonValue(remoteNode.host));
+    nodeSettingObj.insert("port", QJsonValue(remoteNode.port));
+    nodeSettingObj.insert("path", QJsonValue(remoteNode.path));
+    nodeSettingObj.insert("ssl", QJsonValue(remoteNode.ssl));
+    m_settings.insert(OPTION_REMOTE_NODE, nodeSettingObj);
+  }
+  saveSettings();
 }
 
-void Settings::setRpcNodesList(const QStringList &_RpcNodesList) {
-  if (getRpcNodesList() != _RpcNodesList) {
-    m_settings.insert(OPTION_RPCNODES, QJsonArray::fromStringList(_RpcNodesList));
+void Settings::setRpcNodesList(const QVector<NodeSetting> &RpcNodesList) {
+  if (!RpcNodesList.isEmpty()) {
+    QJsonArray nodesList;
+    for (const NodeSetting &nodeSetting : RpcNodesList) {
+      QJsonObject nodeSettingObj;
+      nodeSettingObj.insert("host", QJsonValue(nodeSetting.host));
+      nodeSettingObj.insert("port", QJsonValue(nodeSetting.port));
+      nodeSettingObj.insert("path", QJsonValue(nodeSetting.path));
+      nodeSettingObj.insert("ssl", QJsonValue(nodeSetting.ssl));
+      nodesList.append(nodeSettingObj);
+    }
+    m_settings.insert(OPTION_RPCNODES, nodesList);
+  }
+  saveSettings();
+}
+
+void Settings::setMiningThreads(const quint16& _threads) {
+  if (_threads != 0) {
+    m_settings.insert("miningThreads", _threads);
   }
   saveSettings();
 }
@@ -466,6 +723,234 @@ void Settings::setCloseToTrayEnabled(bool _enable) {
   }
 }
 #endif
+
+void Settings::setOptimizationEnabled(bool _enable) {
+  if (_enable == isOptimizationEnabled()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_WALLET_OPTIMIZATION_ENABLED, _enable);
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setOptimizationTimeSetManually(bool _enable) {
+  if (_enable == isOptimizationTimeSetManually()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_WALLET_OPTIMIZATION_TIME_SET_MANUALLY, _enable);
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setOptimizationStartTime(const QTime& _startTime) {
+  if (_startTime == getOptimizationStartTime()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_WALLET_OPTIMIZATION_START_TIME, _startTime.toString(Qt::ISODate));
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setOptimizationStopTime(const QTime& _stopTime) {
+  if (_stopTime == getOptimizationStopTime()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_WALLET_OPTIMIZATION_STOP_TIME, _stopTime.toString(Qt::ISODate));
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setOptimizationInterval(quint64 _interval) {
+  if (_interval == getOptimizationInterval()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_WALLET_OPTIMIZATION_INTERVAL, QString::number(_interval));
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setOptimizationThreshold(quint64 _threshold) {
+  if (_threshold == getOptimizationThreshold()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_WALLET_OPTIMIZATION_THRESHOLD, QString::number(_threshold));
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setOptimizationMixin(quint64 _mixin) {
+  if (_mixin == getOptimizationMixin()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_WALLET_OPTIMIZATION_MIXIN, QString::number(_mixin));
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setSkipFusionTransactions(bool _skip) {
+  if (_skip == skipFusionTransactions()) {
+    return;
+  }
+
+  {
+    QJsonObject optimizationObject;
+    if (m_settings.contains(OPTION_WALLET_OPTIMIZATION)) {
+      optimizationObject = m_settings.value(OPTION_WALLET_OPTIMIZATION).toObject();
+    }
+
+    optimizationObject.insert(OPTION_SKIP_WALLET_OPTIMIZATION_TRANSACTIONS, _skip);
+    m_settings.insert(OPTION_WALLET_OPTIMIZATION, optimizationObject);
+    saveSettings();
+  }
+}
+
+void Settings::setRunWalletRpc(bool _enable) {
+  if (_enable == runWalletRpc()) {
+    return;
+  }
+
+  {
+    QJsonObject walletRpcObject;
+    if (m_settings.contains(OPTION_WALLET_RPC)) {
+      walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    }
+
+    walletRpcObject.insert(OPTION_WALLET_RPC_ENABLED, _enable);
+    m_settings.insert(OPTION_WALLET_RPC, walletRpcObject);
+    saveSettings();
+  }
+}
+
+void Settings::setWalletRpcBindIp(const QString& _ip) {
+  if (_ip == getWalletRpcBindIp()) {
+    return;
+  }
+
+  {
+    QJsonObject walletRpcObject;
+    if (m_settings.contains(OPTION_WALLET_RPC)) {
+      walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    }
+
+    walletRpcObject.insert(OPTION_WALLET_RPC_BIND_IP, _ip);
+    m_settings.insert(OPTION_WALLET_RPC, walletRpcObject);
+    saveSettings();
+  }
+}
+
+void Settings::setWalletRpcBindPort(const quint16& _port) {
+  if (_port == getWalletRpcBindPort()) {
+    return;
+  }
+
+  {
+    QJsonObject walletRpcObject;
+    if (m_settings.contains(OPTION_WALLET_RPC)) {
+      walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    }
+
+    walletRpcObject.insert(OPTION_WALLET_RPC_BIND_PORT, _port);
+    m_settings.insert(OPTION_WALLET_RPC, walletRpcObject);
+    saveSettings();
+  }
+}
+
+void Settings::setWalletRpcUser(const QString& _user) {
+  if (_user == getWalletRpcUser()) {
+    return;
+  }
+
+  {
+    QJsonObject walletRpcObject;
+    if (m_settings.contains(OPTION_WALLET_RPC)) {
+      walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    }
+
+    walletRpcObject.insert(OPTION_WALLET_RPC_USER, _user);
+    m_settings.insert(OPTION_WALLET_RPC, walletRpcObject);
+    saveSettings();
+  }
+}
+
+void Settings::setWalletRpcPassword(const QString& _pwd) {
+  if (_pwd == getWalletRpcPassword()) {
+    return;
+  }
+
+  {
+    QJsonObject walletRpcObject;
+    if (m_settings.contains(OPTION_WALLET_RPC)) {
+      walletRpcObject = m_settings.value(OPTION_WALLET_RPC).toObject();
+    }
+
+    walletRpcObject.insert(OPTION_WALLET_RPC_PASSWORD, _pwd);
+    m_settings.insert(OPTION_WALLET_RPC, walletRpcObject);
+    saveSettings();
+  }
+}
+
+void Settings::setHideEverythingOnLocked(bool _hide) {
+  if (hideEverythingOnLocked() != _hide) {
+    m_settings.insert("hideEverythingOnLocked", _hide);
+    saveSettings();
+  }
+}
 
 void Settings::saveSettings() const {
   QFile cfgFile(getDataDir().absoluteFilePath(QCoreApplication::applicationName() + ".cfg"));

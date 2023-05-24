@@ -1,4 +1,4 @@
-// Copyright (c) 2018 PluraCoin developers
+// Copyright (c) 2017 The Karbowanec developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,7 +6,7 @@
 #include "ui_mnemonicseeddialog.h"
 #include "CurrencyAdapter.h"
 #include "WalletAdapter.h"
-#include "mnemonics/electrum-words.h"
+#include "Mnemonics/electrum-words.h"
 #include "Settings.h"
 
 namespace WalletGui {
