@@ -1,0 +1,275 @@
+name: Release
+
+on:
+  push:
+    tags:
+    - '*'
+
+jobs:
+  build-windows:
+    name: Windows
+    runs-on: windows-2019
+    env:
+      BOOST_ROOT: C:\thirdparties\boost-1.72.0
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Install Boost
+        shell: cmd
+        run: |
+          choco install wget --no-progress
+          wget -nv -O boost-installer.exe "https://sourceforge.net/projects/boost/files/boost-binaries/1.72.0/boost_1_72_0-msvc-14.2-64.exe/download"
+          boost-installer.exe /dir=%BOOST_ROOT% /sp- /verysilent /suppressmsgboxes /norestart
+
+      - name: Install OpenSSL
+        run: choco install openssl
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '5.15.2'
+          host: 'windows'
+          target: 'desktop'
+          install-deps: 'true'
+
+      - name: Build
+        shell: powershell
+        id: build
+        env:
+          GIT_REDIRECT_STDERR: '2>&1'
+          VCINSTALLDIR: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\'
+        run: |
+          $build_folder = "build"
+          $plura_ver = "${{ github.ref }}" -replace '[refs/tags/]'
+          $release_name = "PluraCoin-wallet-win64-$plura_ver"
+          set CMAKE_PREFIX_PATH="$($qt5_cmake)"
+          $qt5_cmake = "${{ env.Qt5_Dir }}/lib/cmake" -replace '[/]', '\\'
+          Remove-Item cryptonote -Recurse -ErrorAction Ignore
+          git clone https://github.com/pluracoin/PluraCoin.git cryptonote --quiet
+          mkdir "$build_folder"
+          cd "$build_folder"
+          Start-Process cmake -ArgumentList "-DBOOST_ROOT=""$env:BOOST_ROOT"" -DBOOST_INCLUDE_DIRS=""$env:BOOST_ROOT/include"" -G ""Visual Studio 16 2019"" -A x64 -DARCH=default",".." -NoNewWindow -Wait
+          Start-Process msbuild -ArgumentList "PluraCoinWallet.sln","/p:Configuration=Release" -NoNewWindow -Wait
+          $build_path = "./$build_folder"
+          echo "build_path=${build_path}" >> $env:GITHUB_OUTPUT
+          echo "release_name=${release_name}" >> $env:GITHUB_OUTPUT
+          echo "plura_ver=${plura_ver}" >> $env:GITHUB_OUTPUT
+  
+      - name: Pack
+        shell: powershell
+        id: pack
+        env:
+          VCINSTALLDIR: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\'
+        run: |
+          $build_folder = "${{ steps.build.outputs.build_path }}"
+          $release_name = "${{ steps.build.outputs.release_name }}"
+          $release_folder = "Release"
+          cd "$build_folder"
+          $plura_ver = "${{ steps.build.outputs.plura_ver }}"
+          mkdir "$release_folder/$release_name"
+          mkdir "$release_folder/$release_name/languages"
+          cp languages/*.qm "$release_folder/$release_name/languages/"
+          cd "$release_folder"
+          cp PluraCoinWallet.exe "$release_name/"
+          cp "C:/Program Files/OpenSSL-Win64/bin/libssl*.dll" "$release_name/"
+          cp "C:/Program Files/OpenSSL-Win64/bin/libcrypto*.dll" "$release_name/"
+          cp "../../COPYING" "$release_name/LICENSE.txt"
+          cp "../../*.bat" "$release_name/"
+          windeployqt --release PluraCoinWallet.exe --dir "$release_name/"
+          Compress-Archive -Path "$release_name/" -DestinationPath "$release_name.zip"
+          $sha256a = (Get-FileHash "$release_name.zip").Hash
+          $asset_path_archive = "./$build_folder/$release_folder/$release_name.zip"
+          echo "sha256a=${sha256a}" >> $env:GITHUB_OUTPUT
+          echo "release_name_archive=${release_name}.zip" >> $env:GITHUB_OUTPUT
+          echo "asset_path_archive=${asset_path_archive}" >> $env:GITHUB_OUTPUT
+          cd ../
+          makensis WindowsInstall.nsi
+          cd "$release_folder"
+          Compress-Archive -Path "PluraCoinWallet-Setup.exe" -DestinationPath "$release_name-install.zip"
+          $sha256i = (Get-FileHash "$release_name-install.zip").Hash
+          $asset_path_install = "./$build_folder/$release_folder/$release_name-install.zip"
+          echo "sha256i=${sha256i}" >> $env:GITHUB_OUTPUT
+          echo "release_name_install=${release_name}-install.zip" >> $env:GITHUB_OUTPUT
+          echo "asset_path_install=${asset_path_install}" >> $env:GITHUB_OUTPUT
+          echo "plura_ver=${plura_ver}" >> $env:GITHUB_OUTPUT
+
+      - name: Create Release Archive
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          files: ${{ steps.pack.outputs.asset_path_archive }}
+          name: PluraCoin Wallet ${{ steps.pack.outputs.plura_ver }}
+          append_body: true
+          body: |
+            **${{ steps.pack.outputs.release_name_archive }}**
+            ${{ steps.pack.outputs.sha256a }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release Installer
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          files: ${{ steps.pack.outputs.asset_path_install }}
+          name: PluraCoin Wallet ${{ steps.pack.outputs.plura_ver }}
+          append_body: true
+          body: |
+            **${{ steps.pack.outputs.release_name_install }}**
+            ${{ steps.pack.outputs.sha256i }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    name: macOS
+    runs-on: macos-11
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '5.15.2'
+          install-deps: 'true'
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install other deps
+        run: |
+          brew install gcc boost openssl
+          brew link boost --force
+
+      - name: Build
+        id: build
+        run: |
+          build_folder="build/release"
+          plura_ver=$(echo ${{ github.ref }} | sed 's|refs/tags/||')
+          release_name="PluraCoin-wallet-macOS-$plura_ver"
+          app_name="PluraCoinWallet.app"
+          lang_folder="/Contents/Resources/languages"
+          rm -rf cryptonote
+          git clone https://github.com/pluracoin/pluracoin.git cryptonote
+          mkdir -p "$build_folder"
+          cd "$build_folder"
+          cmake -D ARCH=default -D CMAKE_C_FLAGS="-mmacosx-version-min=10.12" -D CMAKE_CXX_FLAGS="-mmacosx-version-min=10.12" -D CMAKE_BUILD_TYPE=Release ../..
+          make
+          mkdir "$app_name$lang_folder"
+          cp languages/*.qm "$app_name$lang_folder"
+          macdeployqt "$app_name"
+          cpack
+          mv *.dmg "$release_name".dmg
+          sha256=$(shasum -a 256 "$release_name".dmg | awk '{ print toupper($1) }')
+          asset_path="./$build_folder/$release_name.dmg"
+          echo "sha256=${sha256}" >> $GITHUB_OUTPUT
+          echo "release_name=${release_name}.zip" >> $GITHUB_OUTPUT
+          echo "asset_path=${asset_path}" >> $GITHUB_OUTPUT
+          echo "plura_ver=${plura_ver}" >> $GITHUB_OUTPUT
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          files: ${{ steps.build.outputs.asset_path }}
+          name: PluraCoin Wallet ${{ steps.build.outputs.plura_ver }}
+          append_body: true
+          body: |
+            **${{ steps.build.outputs.release_name }}**
+            ${{ steps.build.outputs.sha256 }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-ubuntu22:
+    name: Ubuntu 22.04
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Build
+        id: build
+        run: |
+          sudo apt update -y
+          sudo apt install -y qtbase5-dev qttools5-dev qttools5-dev-tools libboost-all-dev
+          build_folder="build/release"
+          plura_ver=$(echo "$GITHUB_REF" | sed 's|refs/tags/||')
+          release_name=PluraCoin-wallet-ubuntu-22.04-"$plura_ver"
+          app_name="PluraCoinWallet"
+          rm -rf cryptonote
+          git clone https://github.com/pluracoin/PluraCoin.git cryptonote
+          mkdir -p "$build_folder"
+          cd "$build_folder"
+          cmake -D ARCH=default -D CMAKE_BUILD_TYPE=Release -D CMAKE_POSITION_INDEPENDENT_CODE:BOOL=true -D BOOST_IGNORE_SYSTEM_PATHS_DEFAULT=ON -D BOOST_ROOT=/usr ../..
+          make
+          cpack
+          tar -czf "$release_name".tar.gz *.deb
+          sha256=$(shasum -a 256 "$release_name".tar.gz | awk '{print toupper($1)}')
+          asset_path="./$build_folder/$release_name".tar.gz
+          echo "sha256=${sha256}" >> $GITHUB_OUTPUT
+          echo "release_name=${release_name}.tar.gz" >> $GITHUB_OUTPUT
+          echo "asset_path=${asset_path}" >> $GITHUB_OUTPUT
+          echo "plura_ver=${plura_ver}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          files: ${{ steps.build.outputs.asset_path }}
+          name: PluraCoin Wallet ${{ steps.build.outputs.plura_ver }}
+          append_body: true
+          body: |
+            **${{ steps.build.outputs.release_name }}**
+            ${{ steps.build.outputs.sha256 }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-ubuntu20:
+    name: Ubuntu 20.04
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Build
+        id: build
+        run: |
+          sudo apt update -y
+          sudo apt install -y qt5-default qttools5-dev qttools5-dev-tools libboost-all-dev
+          build_folder="build/release"
+          plura_ver=$(echo "$GITHUB_REF" | sed 's|refs/tags/||')
+          release_name=PluraCoin-wallet-ubuntu-20.04-"$plura_ver"
+          app_name="PluraCoinWallet"
+          rm -rf cryptonote
+          git clone https://github.com/pluracoin/PluraCoin.git cryptonote
+          mkdir -p "$build_folder"
+          cd "$build_folder"
+          cmake -D ARCH=default -D CMAKE_BUILD_TYPE=Release -D CMAKE_POSITION_INDEPENDENT_CODE:BOOL=true -D BOOST_IGNORE_SYSTEM_PATHS_DEFAULT=ON -D BOOST_ROOT=/usr ../..
+          make
+          cpack
+          tar -czf "$release_name".tar.gz *.deb
+          sha256=$(shasum -a 256 "$release_name".tar.gz | awk '{print toupper($1)}')
+          asset_path="./$build_folder/$release_name".tar.gz
+          echo "sha256=${sha256}" >> $GITHUB_OUTPUT
+          echo "release_name=${release_name}.tar.gz" >> $GITHUB_OUTPUT
+          echo "asset_path=${asset_path}" >> $GITHUB_OUTPUT
+          echo "plura_ver=${plura_ver}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          files: ${{ steps.build.outputs.asset_path }}
+          name: PluraCoin Wallet ${{ steps.build.outputs.plura_ver }}
+          append_body: true
+          body: |
+            **${{ steps.build.outputs.release_name }}**
+            ${{ steps.build.outputs.sha256 }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

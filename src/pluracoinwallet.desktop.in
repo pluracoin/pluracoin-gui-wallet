@@ -1,0 +1,12 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=PLURA Wallet
+GenericName=PLURA
+Comment=PluraCoin wallet
+Exec=@WALLET_NAME@ %U
+Terminal=false
+Type=Application
+Icon=pluracoin
+MimeType=x-scheme-handler/pluracoin;
+Categories=Office;Finance;
+Version=@WALLET_VERSION@

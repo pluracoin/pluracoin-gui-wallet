@@ -1,0 +1,1 @@
+start cmd.exe /c %~dp0/PluraCoinWallet.exe --portable
